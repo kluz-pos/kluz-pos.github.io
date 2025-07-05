@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Sistema POS</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #f4f7f6;
+    }
+    .sidebar {
+      width: 240px;
+      background: #03543f;
+      color: white;
+      height: 100vh;
+      position: fixed;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 0;
+    }
+    .sidebar img {
+      height: 55px;
+      width: auto;
+    }
+    .sidebar button {
+      background: none;
+      border: none;
+      color: white;
+      text-align: left;
+      width: 100%;
+      padding: 15px 20px;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    .sidebar button:hover {
+      background: #044c39;
+    }
+    .main {
+      margin-left: 240px;
+      padding: 40px;
+    }
+    .hidden {
+      display: none;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 6px 8px;
+      margin-bottom: 12px;
+      font-size: 0.9rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #ccc;
+    }
+    th {
+      background-color: #055f47;
+      color: white;
+    }
+    .login {
+      max-width: 400px;
+      margin: 100px auto;
+      padding: 40px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background: white;
+    }
+    .login input {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 20px;
+      font-size: 1rem;
+    }
+    .login button {
+      background: #03543f;
+      color: white;
+      padding: 12px;
+      width: 100%;
+      border: none;
+      border-radius: 5px;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    .product-card {
+      border: 1px solid #ccc;
+      padding: 15px;
+      border-radius: 6px;
+      background: white;
+      width: 200px;
+      cursor: pointer;
+      text-align: center;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      transition: transform 0.2s;
+    }
+    .product-card:hover {
+      transform: scale(1.03);
+    }
+    .venta-contenedor {
+      display: flex;
+      gap: 30px;
+      flex-wrap: wrap;
+    }
+    .inventario-contenedor {
+      display: flex;
+      flex-direction: column;  /* Una sección debajo de la otra */
+      gap: 30px;
+    }
+
+    .venta-section {
+      flex: 1;
+      background: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .venta-section h3 {
+      border-bottom: 2px solid #eee;
+      padding-bottom: 10px;
+      margin-bottom: 20px;
+      color: #03543f;
+    }
+    #carrito ul {
+      list-style: none;
+      padding-left: 0;
+    }
+    .remove-btn {
+      color: red;
+      font-weight: bold;
+      margin-left: 10px;
+      cursor: pointer;
+    }
+    .btn-cobrar {
+      margin-top: 15px;
+      background-color: #03543f;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .btn-cobrar:hover {
+      background-color: #02765c;
+    }
+  </style>
+</head>
+<body>
+<div id="login" class="login">
+  <h2>Iniciar Sesión</h2>
+  <input type="text" id="usuario" placeholder="Usuario">
+  <input type="password" id="contrasena" placeholder="Contraseña">
+  <button id="btn-login">Ingresar</button>
+</div>
+
+<div id="app" class="hidden">
+  <div class="sidebar">
+    <img src="https://dlfkzcwhyopbghkqrzcy.supabase.co/storage/v1/object/public/logosweb//logo%20Kluz.jpeg" alt="Logo POS">
+    <button onclick="mostrarPanel('venta')">🛒 Punto de Venta</button>
+    <button onclick="mostrarPanel('inventario')">📦 Inventario</button>
+    <button onclick="mostrarPanel('reportes')">📊 Reportes</button>
+    <button onclick="mostrarPanel('clientes')">👥 Clientes</button>
+    <button onclick="mostrarPanel('configuracion')">⚙️ Configuración</button>
+    <button onclick="mostrarPanel('usuarios')">👤 Gestión de Usuarios</button>
+    <hr style="width: 80%; border: 0.5px solid #fff; margin: 20px 0;">
+    <button onclick="cerrarSesion()">🔓 Cerrar sesión</button>
+
+  </div>
+
+  <div class="main">
+    <div id="usuario-logueado" style="text-align:right; font-weight:bold; margin-bottom:20px;"></div>
+    <div id="venta" class="panel">
+      <h2>Punto de Venta</h2>
+      <div class="venta-contenedor">
+        <div class="venta-section">
+          <h3>PRODUCTOS</h3>
+          <div id="productos-venta" style="display: flex; flex-wrap: wrap; gap: 20px;"></div>
+        </div>
+        <div class="venta-section">
+          <h3>CARRITO</h3>
+          <ul id="carrito-lista"></ul>
+          <p>Total: S/ <span id="carrito-total">0.00</span></p>
+          <button class="btn-cobrar" onclick="cobrar()">Cobrar</button>
+        </div>
+      </div>
+    </div>
+
+<div id="inventario" class="panel hidden">
+  <h2>Inventario</h2>
+
+  <div class="inventario-contenedor">
+  <div class="venta-section">
+    <h3>Información del Producto</h3>
+
+    <form id="form-producto" style="max-width: 100%;">
+      <style>
+        .form-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 20px 30px;
+        }
+
+        .form-group {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .form-group label {
+          margin-bottom: 5px;
+          font-weight: 600;
+        }
+
+        input, select, textarea {
+          font-size: 0.95rem;
+          padding: 8px 10px;
+          border: 1px solid #ccc;
+          border-radius: 4px;
+        }
+
+        textarea {
+          resize: vertical;
+          min-height: 80px;
+        }
+
+        #descripcion {
+          width: 100%;
+        }
+
+        .form-full {
+          grid-column: span 2;
+        }
+
+        .form-small {
+          max-width: 150px;
+        }
+
+        .btn-registrar {
+          background-color: #03543f;
+          color: white;
+          border: none;
+          padding: 10px 18px;
+          border-radius: 5px;
+          font-size: 1rem;
+          cursor: pointer;
+          width: fit-content;
+        }
+
+        .btn-registrar:hover {
+          background-color: #02765c;
+        }
+      </style>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="nombre">Nombre</label>
+          <input type="text" id="nombre" required>
+        </div>
+
+        <div class="form-group form-small">
+          <label for="precio">Precio</label>
+          <input type="number" id="precio" required>
+        </div>
+
+        <div class="form-group">
+          <label for="cantidad">Cantidad</label>
+          <input type="number" id="cantidad" required>
+        </div>
+
+        <div class="form-group">
+          <label for="codigo">Código</label>
+          <input type="text" id="codigo" required>
+        </div>
+
+        <div class="form-group">
+          <label for="categoria">Categoría</label>
+          <input type="text" id="categoria">
+        </div>
+
+        <div class="form-group">
+          <label for="sucursal">Sucursal</label>
+          <select id="sucursal">
+            <option value="Central">Sucursal Central</option>
+            <option value="Norte">Sucursal Norte</option>
+            <option value="Sur">Sucursal Sur</option>
+          </select>
+        </div>
+
+        <div class="form-group form-full">
+          <label for="descripcion">Descripción</label>
+          <textarea id="descripcion" placeholder="Descripción del producto..."></textarea>
+        </div>
+
+        <div class="form-group form-full">
+          <button type="submit" class="btn-registrar">Registrar Producto</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <div class="venta-section">
+    <h3>Productos Registrados</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Precio</th>
+          <th>Cantidad</th>
+          <th>Código</th>
+          <th>Categoría</th>
+          <th>Sucursal</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="lista-productos"></tbody>
+    </table>
+  </div>
+</div>
+
+
+    <div id="reportes" class="panel hidden">
+      <h2>Reportes</h2>
+      <canvas id="graficoVentas" width="400" height="200"></canvas>
+      <canvas id="graficoProductos" width="400" height="200"></canvas>
+    </div>
+
+    <div id="clientes" class="panel hidden">
+      <h2>Clientes</h2>
+      <p>Gestion por implementar.</p>
+    </div>
+
+    <div id="configuracion" class="panel hidden">
+      <h2>Configuraci贸n</h2>
+      <p>Opciones de sistema por implementar.</p>
+    </div>
+  </div>
+  <div id="usuarios" class="panel hidden">
+  <h2>Gestión de Usuarios</h2>
+
+  <div class="venta-contenedor" style="flex-direction: column; gap: 30px;">
+    <div class="venta-section">
+      <h3>Crear Nuevo Usuario</h3>
+      <form onsubmit="event.preventDefault(); crearUsuario();">
+        <style>
+          .form-usuario-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+          }
+          .form-usuario-group {
+            display: flex;
+            flex-direction: column;
+          }
+          .form-usuario-group label {
+            font-weight: 600;
+            margin-bottom: 5px;
+          }
+          .form-usuario-group input {
+            padding: 8px;
+            font-size: 0.95rem;
+          }
+          .permiso-checkboxes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 10px;
+          }
+          .permiso-checkboxes label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.95rem;
+          }
+          .btn-crear-usuario {
+            margin-top: 20px;
+            background-color: #03543f;
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+          }
+          .btn-crear-usuario:hover {
+            background-color: #02765c;
+          }
+        </style>
+
+        <div class="form-usuario-grid">
+          <div class="form-usuario-group">
+            <label for="nuevoUsuario">Nombre de Usuario</label>
+            <input type="text" id="nuevoUsuario" required>
+          </div>
+          <div class="form-usuario-group">
+            <label for="nuevaContrasena">Contraseña</label>
+            <input type="password" id="nuevaContrasena" required>
+          </div>
+        </div>
+
+        <label style="font-weight: 600; margin-top: 15px;">Permisos</label>
+        <div class="permiso-checkboxes">
+          <label><input type="checkbox" class="permiso" value="venta"> Punto de Venta</label>
+          <label><input type="checkbox" class="permiso" value="inventario"> Inventario</label>
+          <label><input type="checkbox" class="permiso" value="reportes"> Reportes</label>
+          <label><input type="checkbox" class="permiso" value="clientes"> Clientes</label>
+          <label><input type="checkbox" class="permiso" value="configuracion"> Configuración</label>
+        </div>
+
+        <button type="submit" class="btn-crear-usuario">Crear Usuario</button>
+      </form>
+    </div>
+
+    <div class="venta-section">
+  <h3>Usuarios Registrados</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Usuario</th>
+        <th>Permisos</th>
+        <th>Acciones</th> </tr>
+    </thead>
+    <tbody id="tabla-usuarios"></tbody>
+  </table>
+  </div>
+</div>
+
+<script>
+  
+  function mostrarPanel(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
+  document.getElementById(id)?.classList.remove('hidden');
+  if (id === 'venta') {
+    listarProductosVenta(); // ✅ Cargar productos solo en vista de venta
+  }
+  }
+
+</script>
+<script type="module">
+  import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+  // ✅ Tus credenciales reales
+  const SUPABASE_URL = "https://dlfkzcwhyopbghkqrzcy.supabase.co";
+  const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsZmt6Y3doeW9wYmdoa3FyemN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE1ODkzODgsImV4cCI6MjA2NzE2NTM4OH0.AjGB6MYYMYVmB7jIhZ7wd3IUb9QWh2ZI1GAywmtC58s";
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let carrito = []; // Se mueve la declaración de carrito a un ámbito más amplio
+
+ async function login() {
+  const user = document.getElementById('usuario').value.trim();
+  const pass = document.getElementById('contrasena').value.trim();
+
+  // Validación básica de entrada para evitar llamadas innecesarias a Supabase
+  if (!user || !pass) {
+    alert('Por favor, ingresa tu usuario y contraseña.');
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from('usuarios')
+    .select('usuario, permisos') // Solo selecciona los campos necesarios
+    .eq('usuario', user)
+    .eq('contrasena', pass)
+    .single();
+
+  if (error || !data) {
+    // Mensaje de error genérico por razones de seguridad
+    alert('Credenciales incorrectas o ha ocurrido un error.');
+    console.error('Error durante el login:', error); // Registra el error real para depuración
+    return; // Sale de la función después de mostrar una alerta
+  }
+
+  // Si el inicio de sesión es exitoso
+  document.getElementById('login').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+
+  // 🛠️ Normaliza permisos
+  // Asegura que 'permisos' sea siempre un array de cadenas recortadas
+  const permisos = Array.isArray(data.permisos)
+    ? data.permisos
+    : String(data.permisos || '').split(',').map(p => p.trim()).filter(p => p !== ''); // Se añadió un filtro para cadenas vacías
+  data.permisos = permisos;
+
+  aplicarPermisosDelUsuario(data);
+  mostrarPanel('venta'); // Asumiendo que 'venta' es el panel predeterminado a mostrar después del login
+
+  localStorage.setItem("usuarioActivo", data.usuario);
+  const contenedor = document.getElementById("usuario-logueado");
+  if (contenedor) {
+    contenedor.textContent = `👤 Usuario: ${data.usuario}`;
+  }
+} // Se cierra correctamente la función login aquí.
+
+  // Todas las funciones siguientes deben estar FUERA de la función login
+  function aplicarPermisosDelUsuario(usuario) {
+  const secciones = ["venta", "inventario", "reportes", "clientes", "configuracion", "usuarios"]; // AÑADE "usuarios" AQUÍ
+  secciones.forEach(seccion => {
+    const boton = Array.from(document.querySelectorAll('.sidebar button'))
+      // Ajusta esta búsqueda para que coincida con el texto real del botón
+      .find(b => {
+          if (seccion === 'usuarios') return b.textContent.includes('Gestión de Usuarios');
+          return b.textContent.toLowerCase().includes(seccion);
+      });
+    if (boton) {
+      boton.style.display = usuario.permisos.includes(seccion) ? 'block' : 'none';
+    }
+  });
+}
+
+  async function cobrar() {
+    if (carrito.length === 0) {
+        alert("No hay productos en el carrito.");
+        return;
+    }
+
+    // ✅ Nuevo: Calcular el total sumando (precio * cantidadEnCarrito)
+    let total = carrito.reduce((sum, p) => sum + (p.precio * p.cantidadEnCarrito), 0);
+
+    // Agrupar productos por ID para sumar las cantidades a vender de cada uno
+    // No necesitas un nuevo Map si ya tienes 'cantidadEnCarrito' en cada item del carrito
+    // Puedes iterar directamente sobre el 'carrito' actual.
+    // La lógica de `productosParaActualizar` que tenías antes no es necesaria si ya gestionas
+    // la cantidad por producto en el mismo objeto del carrito.
+
+    // Paso 1: Validar y Actualizar el inventario por cada producto en el carrito
+    for (const item of carrito) { // Itera directamente sobre el carrito
+        // Obtener la cantidad actual del producto en el inventario desde Supabase
+        const { data: productoInventario, error: errorInventario } = await supabase
+            .from('productos')
+            .select('nombre, cantidad')
+            .eq('id', item.id) // Usa item.id
+            .single();
+
+        if (errorInventario || !productoInventario) {
+            console.error(`Error al obtener cantidad para producto ID ${item.id}:`, errorInventario?.message || 'Producto no encontrado.');
+            alert(`Hubo un error al procesar un producto. Venta no completada.`);
+            return;
+        }
+
+        // ✅ Modificación clave aquí: restar 'item.cantidadEnCarrito'
+        const nuevaCantidad = productoInventario.cantidad - item.cantidadEnCarrito;
+
+        if (nuevaCantidad < 0) {
+            alert(`No hay suficiente stock para ${productoInventario.nombre}. Se intentaron vender ${item.cantidadEnCarrito}, pero solo hay ${productoInventario.cantidad}. Venta cancelada.`);
+            return;
+        }
+
+        // Actualizar la cantidad en la base de datos
+        const { error: updateError } = await supabase
+            .from('productos')
+            .update({ cantidad: nuevaCantidad })
+            .eq('id', item.id); // Usa item.id
+
+        if (updateError) {
+            console.error(`Error al actualizar el stock de ${productoInventario.nombre}:`, updateError.message);
+            alert(`Error al actualizar el inventario para ${productoInventario.nombre}. Venta no completada.`);
+            return;
+        }
+    }
+
+    alert(`✅ Venta registrada por S/ ${total.toFixed(2)}. Inventario actualizado.`);
+
+    // Limpiar carrito y actualizar la vista del carrito
+    carrito = [];
+    actualizarCarrito();
+    listarProductosVenta(); // Para actualizar el stock visible de los productos
+    listarProductos(); // Para actualizar la tabla de inventario
+}
+
+    async function crearUsuario() {
+    const usuario = document.getElementById('nuevoUsuario').value.trim();
+    const contrasena = document.getElementById('nuevaContrasena').value.trim();
+    const permisos = Array.from(document.querySelectorAll('.permiso:checked')).map(cb => cb.value);
+
+    if (!usuario || !contrasena || permisos.length === 0) {
+      alert("Completa todos los campos");
+      return;
+    }
+
+    // ✅ Verifica si ya existe
+    const { data: existente, error: errorExistente } = await supabase
+      .from('usuarios')
+      .select('*')
+      .eq('usuario', usuario)
+      .maybeSingle();
+
+    if (existente) {
+      alert("Ya existe un usuario con ese nombre.");
+      return;
+    }
+
+    const { error } = await supabase.from('usuarios').insert([{ usuario, contrasena, permisos }]);
+    if (error) {
+      alert("Error al guardar: " + error.message);
+    } else {
+      alert("Usuario creado");
+      document.getElementById('nuevoUsuario').value = '';
+      document.getElementById('nuevaContrasena').value = '';
+      document.querySelectorAll('.permiso').forEach(cb => cb.checked = false);
+      listarUsuarios();
+    }
+  }
+
+  async function listarUsuarios() {
+    const { data, error } = await supabase.from('usuarios').select('*');
+    if (error) return alert("Error al cargar usuarios");
+
+    const tbody = document.getElementById('tabla-usuarios');
+    while (tbody.firstChild) {
+      tbody.removeChild(tbody.firstChild);
+    }
+
+    data.forEach(u => {
+      console.log("Usuario recibido:", u);
+
+      const tr = document.createElement('tr');
+
+      const tdUsuario = document.createElement('td');
+      tdUsuario.textContent = u.usuario;
+
+      const tdPermisos = document.createElement('td');
+      tdPermisos.textContent = Array.isArray(u.permisos) ? u.permisos.join(', ') : u.permisos;
+
+      const tdAcciones = document.createElement('td');
+      const btnEliminar = document.createElement('button');
+      btnEliminar.textContent = 'Eliminar';
+      btnEliminar.style = "background-color:red;color:white;padding:6px;border:none;border-radius:4px;cursor:pointer;";
+
+      // ✅ Aquí conectamos el evento correctamente para todos los navegadores
+      btnEliminar.addEventListener('click', () => eliminarUsuarioPorNombre(u.usuario));
+
+      tdAcciones.appendChild(btnEliminar);
+
+      tr.appendChild(tdUsuario);
+      tr.appendChild(tdPermisos);
+      tr.appendChild(tdAcciones);
+
+      tbody.appendChild(tr);
+    });
+  }
+
+
+  window.eliminarUsuarioPorNombre = async function(nombre) {
+    console.log("⚠️ Clic en botón eliminar para:", nombre);
+
+    if (!confirm(`¿Eliminar usuario '${nombre}'?`)) {
+      console.log("🚫 Eliminación cancelada");
+      return;
+    }
+
+    const { error } = await supabase
+      .from('usuarios')
+      .delete()
+      .eq('usuario', nombre);
+
+    if (error) {
+      alert("Error al eliminar usuario: " + error.message);
+      console.log("❌ Supabase error:", error.message);
+    } else {
+      alert("✅ Usuario eliminado");
+      listarUsuarios();
+    }
+  };
+
+
+  async function guardarProducto() {
+    const nombre = document.getElementById('nombre').value.trim();
+    const precio = parseFloat(document.getElementById('precio').value);
+    const cantidad = parseInt(document.getElementById('cantidad').value);
+    const codigo = document.getElementById('codigo').value.trim();
+
+    if (!nombre || !codigo || isNaN(precio) || isNaN(cantidad)) {
+      alert("Completa todos los campos correctamente.");
+      return;
+    }
+
+    const producto = {
+      nombre,
+      precio,
+      cantidad,
+      codigo,
+      categoria: document.getElementById('categoria').value.trim(),
+      sucursal: document.getElementById('sucursal').value,
+      descripcion: document.getElementById('descripcion').value.trim()
+    };
+
+    const { error } = await supabase.from('productos').insert([producto]);
+
+    if (error) {
+      alert("Error al guardar el producto: " + error.message);
+    } else {
+      alert("Producto registrado correctamente.");
+      listarProductos(); // 👈 Actualiza la tabla
+      document.getElementById('form-producto').reset(); // Limpia el formulario
+    }
+  }
+
+  async function listarProductos() {
+    const { data, error } = await supabase.from('productos').select('*');
+
+    if (error) {
+      console.error("Error al obtener productos:", error.message);
+      return;
+    }
+
+    const tbody = document.getElementById('lista-productos');
+    tbody.innerHTML = "";
+
+    data.forEach(p => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${p.nombre}</td>
+        <td>${p.precio}</td>
+        <td>${p.cantidad}</td>
+        <td>${p.codigo}</td>
+        <td>${p.categoria}</td>
+        <td>${p.sucursal}</td>
+        <td><button onclick="eliminarProducto(${p.id})" style="color:red;">Eliminar</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function eliminarProducto(id) {
+    if (!confirm("¿Deseas eliminar este producto?")) return;
+    const { error } = await supabase.from('productos').delete().eq('id', id);
+    if (!error) {
+      listarProductos();
+    }
+  }
+
+  async function listarProductosVenta() {
+    const { data, error } = await supabase.from("productos").select("*");
+
+    if (error) {
+      console.error("❌ Error al cargar productos:", error.message);
+      return;
+    }
+
+    const contenedor = document.getElementById("productos-venta");
+    if (!contenedor) return;
+
+    contenedor.innerHTML = "";
+
+    data.forEach(producto => {
+      const div = document.createElement("div");
+      div.className = "product-card";
+      div.innerHTML = `
+        <strong>${producto.nombre}</strong><br>
+        <small>${producto.categoria}</small><br>
+        Precio: S/ ${producto.precio.toFixed(2)}
+      `;
+      console.log(`Asignando click a producto: ${producto.nombre}`);
+      div.onclick = () => agregarAlCarrito(producto);
+      contenedor.appendChild(div);
+    });
+  }
+
+  // Variable global para almacenar el producto seleccionado al abrir el modal
+
+  // Modifica agregarAlCarrito para mostrar el modal
+  function agregarAlCarrito(producto) {
+    console.log(`Intentando agregar producto al carrito: ${producto.nombre}`);
+
+    // Buscar si el producto ya está en el carrito
+    const productoExistente = carrito.find(item => item.id === producto.id);
+
+    if (productoExistente) {
+        // Si ya está en el carrito, incrementa la cantidad (si hay stock)
+        // 'producto.cantidad' es el stock disponible del producto original
+        if (productoExistente.cantidadEnCarrito < producto.cantidad) {
+            productoExistente.cantidadEnCarrito++;
+            // No es necesario alertar, la UI del carrito lo mostrará
+        } else {
+            alert(`No hay suficiente stock para añadir más ${producto.nombre}. Stock disponible: ${producto.cantidad}`);
+        }
+    } else {
+        // Si no está en el carrito, añádelo con cantidad 1
+        if (producto.cantidad > 0) { // Solo añadir si hay stock inicial
+            // Añade una nueva propiedad 'cantidadEnCarrito'
+            carrito.push({ ...producto, cantidadEnCarrito: 1 });
+            // No es necesario alertar
+        } else {
+            alert(`"${producto.nombre}" está agotado.`);
+        }
+    }
+
+    // Siempre actualiza la visualización del carrito después de cualquier cambio
+    actualizarCarrito();
+}
+
+  function actualizarCarrito() {
+    const lista = document.getElementById('carrito-lista'); // ✅ Asegúrate que este ID exista en tu HTML
+    const total = document.getElementById('carrito-total'); // ✅ Asegúrate que este ID exista en tu HTML
+
+    // Es crucial que 'lista' y 'total' no sean null. Si lo son, este error ocurrirá.
+    // El error `Cannot set properties of null` ocurre porque 'lista' es null cuando se ejecuta esta línea:
+    // lista.innerHTML = '';
+    // Esto solo debería ocurrir si el script intenta ejecutarse antes que el DOM esté listo,
+    // o si los IDs 'carrito-lista' o 'carrito-total' no existen en el HTML.
+    // Pero en tu HTML sí existen, lo que nos lleva a pensar que el DOM no está completamente cargado.
+    // La solución a esto es asegurar que `actualizarCarrito()` se llama cuando el DOM está listo.
+
+    // Añadimos una verificación para evitar el error si por alguna razón los elementos no están disponibles aún
+    if (!lista || !total) {
+        console.error("Elementos 'carrito-lista' o 'carrito-total' no encontrados. El DOM podría no estar completamente cargado.");
+        return; // Salir de la función si los elementos no existen
+    }
+
+    lista.innerHTML = ''; // Limpiar el carrito actual
+
+    let suma = 0;
+
+    carrito.forEach((p, index) => {
+        const li = document.createElement("li");
+        li.style.display = 'flex';
+        li.style.justifyContent = 'space-between';
+        li.style.alignItems = 'center';
+        li.style.marginBottom = '10px';
+
+        suma += p.precio * p.cantidadEnCarrito; // Usar cantidadEnCarrito para el total
+
+        // Crear el texto del producto
+        const textoProducto = document.createElement('span');
+        textoProducto.textContent = `${p.nombre} (S/ ${p.precio.toFixed(2)} c/u)`;
+        li.appendChild(textoProducto);
+
+        // Contenedor para cantidad y botones
+        const controles = document.createElement('div');
+        controles.style.display = 'flex';
+        controles.style.alignItems = 'center';
+
+        // Botón para disminuir cantidad
+        const btnDisminuir = document.createElement('button');
+        btnDisminuir.textContent = '-';
+        btnDisminuir.style.marginRight = '5px';
+        btnDisminuir.style.padding = '5px 10px';
+        btnDisminuir.style.backgroundColor = '#ccc';
+        btnDisminuir.style.border = 'none';
+        btnDisminuir.style.borderRadius = '3px';
+        btnDisminuir.style.cursor = 'pointer';
+        btnDisminuir.onclick = () => { // Usar onclick para simplificar
+            if (p.cantidadEnCarrito > 1) {
+                p.cantidadEnCarrito--;
+            } else {
+                // Si la cantidad llega a 0, eliminar del carrito
+                carrito.splice(index, 1);
+            }
+            actualizarCarrito(); // Volver a renderizar el carrito
+        };
+        controles.appendChild(btnDisminuir);
+
+        // Input de cantidad
+        const inputCantidad = document.createElement('input');
+        inputCantidad.type = 'number';
+        inputCantidad.value = p.cantidadEnCarrito;
+        inputCantidad.min = '1';
+        inputCantidad.max = p.cantidad; // El stock disponible del producto original
+        inputCantidad.style.width = '50px';
+        inputCantidad.style.textAlign = 'center';
+        inputCantidad.style.margin = '0 5px';
+        inputCantidad.style.padding = '5px';
+        inputCantidad.style.border = '1px solid #ccc';
+        inputCantidad.style.borderRadius = '3px';
+        inputCantidad.onchange = (e) => { // Usar onchange para actualizar al cambiar
+            let nuevaCantidad = parseInt(e.target.value);
+            if (isNaN(nuevaCantidad) || nuevaCantidad < 1) {
+                nuevaCantidad = 1; // Si no es un número válido o es menor que 1, establecer a 1
+            }
+            if (nuevaCantidad > p.cantidad) { // No exceder el stock disponible
+                alert(`No hay suficiente stock para añadir ${nuevaCantidad} unidades de ${p.nombre}. Stock disponible: ${p.cantidad}`);
+                nuevaCantidad = p.cantidad; // Establecer al máximo stock
+            }
+            p.cantidadEnCarrito = nuevaCantidad;
+            actualizarCarrito(); // Volver a renderizar el carrito
+        };
+        controles.appendChild(inputCantidad);
+
+        // Botón para aumentar cantidad
+        const btnAumentar = document.createElement('button');
+        btnAumentar.textContent = '+';
+        btnAumentar.style.marginLeft = '5px';
+        btnAumentar.style.padding = '5px 10px';
+        btnAumentar.style.backgroundColor = '#ccc';
+        btnAumentar.style.border = 'none';
+        btnAumentar.style.borderRadius = '3px';
+        btnAumentar.style.cursor = 'pointer';
+        btnAumentar.onclick = () => { // Usar onclick para simplificar
+            if (p.cantidadEnCarrito < p.cantidad) { // No exceder el stock disponible
+                p.cantidadEnCarrito++;
+            } else {
+                alert(`No hay más stock disponible para ${p.nombre}.`);
+            }
+            actualizarCarrito(); // Volver a renderizar el carrito
+        };
+        controles.appendChild(btnAumentar);
+
+        // Botón para eliminar el producto del carrito
+        const btnEliminar = document.createElement('button');
+        btnEliminar.textContent = 'X';
+        btnEliminar.style.marginLeft = '10px';
+        btnEliminar.style.padding = '5px 10px';
+        btnEliminar.style.backgroundColor = '#d9534f'; // Rojo
+        btnEliminar.style.color = 'white';
+        btnEliminar.style.border = 'none';
+        btnEliminar.style.borderRadius = '3px';
+        btnEliminar.style.cursor = 'pointer';
+        btnEliminar.onclick = () => { // Usar onclick para simplificar
+            carrito.splice(index, 1); // Eliminar del array
+            actualizarCarrito(); // Volver a renderizar el carrito
+        };
+        controles.appendChild(btnEliminar);
+
+        li.appendChild(controles);
+        lista.appendChild(li);
+    });
+
+    total.textContent = suma.toFixed(2);
+}
+
+  // Enlaza el formulario al evento de creación de usuario
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('btn-login')?.addEventListener('click', login);
+    listarUsuarios();
+    listarProductos();
+    const form = document.querySelector('form[onsubmit*="crearUsuario"]');
+    if (form) {
+      form.addEventListener('submit', e => {
+        e.preventDefault();
+        crearUsuario();
+      });
+    }
+    const formProducto = document.getElementById('form-producto');
+    if (formProducto) {
+      formProducto.addEventListener('submit', (e) => {
+        e.preventDefault();
+        guardarProducto();
+      });
+    }
+    const activo = localStorage.getItem("usuarioActivo");
+    if (activo) {
+      const contenedor = document.getElementById("usuario-logueado");
+      if (contenedor) contenedor.textContent = `👤 Usuario: ${activo}`;
+    }
+
+  });
+
+   // Expone funciones globales para HTML
+  window.login = login;
+  window.crearUsuario = crearUsuario;
+  window.mostrarPanel = mostrarPanel;
+  window.cerrarSesion = function () {
+    localStorage.removeItem("usuarioActivo");
+    location.reload(); // Reinicia la app al login
+  };
+  window.listarProductosVenta = listarProductosVenta;
+  window.cobrar = cobrar;
+  window.eliminarProducto = eliminarProducto;
+  window.agregarAlCarrito = agregarAlCarrito; // <-- ¡Añade esta línea!
+
+</script>
+</body>
+</html>
