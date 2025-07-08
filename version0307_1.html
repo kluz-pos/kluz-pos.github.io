@@ -169,13 +169,14 @@
     <button onclick="mostrarPanel('reportes')">📊 Reportes</button>
     <button onclick="mostrarPanel('clientes')">👥 Clientes</button>
     <button onclick="mostrarPanel('configuracion')">⚙️ Configuración</button>
+    <button onclick="mostrarPanel('cajas')">💰 Gestión de Caja</button>
     <button onclick="mostrarPanel('usuarios')">👤 Gestión de Usuarios</button>
     <hr style="width: 80%; border: 0.5px solid #fff; margin: 20px 0;">
     <button onclick="cerrarSesion()">🔓 Cerrar sesión</button>
 
   </div>
 
-  <div class="main">
+<div class="main">
     <div id="usuario-logueado" style="text-align:right; font-weight:bold; margin-bottom:20px;"></div>
     <div id="venta" class="panel">
       <h2>Punto de Venta</h2>
@@ -430,6 +431,50 @@
   </table>
   </div>
 </div>
+</div>
+
+<div id="cajas" class="panel hidden">
+  <h2>Gestión de Caja</h2>
+
+  <div class="venta-section">
+    <h3>Apertura de Caja</h3>
+    <form id="form-apertura">
+      <label for="saldoInicial">Saldo Inicial:</label>
+      <input type="number" id="saldoInicial" required>
+      <label for="sucursalCaja">Sucursal:</label>
+      <select id="sucursalCaja">
+        <option value="Central">Central</option>
+        <option value="Norte">Norte</option>
+        <option value="Sur">Sur</option>
+      </select>
+      <button type="submit" class="btn-cobrar">Abrir Caja</button>
+    </form>
+  </div>
+
+  <div class="venta-section">
+    <h3>Cierre de Caja</h3>
+    <button onclick="cerrarCaja()" class="btn-cobrar">Cerrar Caja</button>
+  </div>
+
+  <div class="venta-section">
+    <h3>Cajas Registradas</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Fecha Apertura</th>
+          <th>Saldo Inicial</th>
+          <th>Fecha Cierre</th>
+          <th>Saldo Final</th>
+          <th>Ventas Totales</th>
+          <th>Estado</th>
+          <th>Sucursal</th>
+        </tr>
+      </thead>
+      <tbody id="tabla-cajas"></tbody>
+    </table>
+  </div>
+</div>
+</div>
 
 <script>
   
@@ -490,7 +535,7 @@
   aplicarPermisosDelUsuario(data);
   mostrarPanel('venta'); // Asumiendo que 'venta' es el panel predeterminado a mostrar después del login
 
-  localStorage.setItem("usuarioActivo", data.usuario);
+  localStorage.setItem("usuarioActivo", document.getElementById("usuario").value.trim());
   const contenedor = document.getElementById("usuario-logueado");
   if (contenedor) {
     contenedor.textContent = `👤 Usuario: ${data.usuario}`;
@@ -562,6 +607,19 @@
             alert(`Error al actualizar el inventario para ${productoInventario.nombre}. Venta no completada.`);
             return;
         }
+    }
+
+    const { error: insertVentaError } = await supabase.from("registros_venta").insert([{
+    caja_id: cajaActualId, // 👈 importante para el cierre de caja
+    fecha_venta: obtenerFechaLocalISO(),
+    total_venta: total,
+    detalle_producto: carrito, // como JSON
+    usuario_id: localStorage.getItem("usuarioActivo")
+    }]);
+
+    if (insertVentaError) {
+    alert("Error al registrar la venta: " + insertVentaError.message);
+    return;
     }
 
     alert(`✅ Venta registrada por S/ ${total.toFixed(2)}. Inventario actualizado.`);
@@ -670,62 +728,77 @@
 
 
   async function guardarProducto() {
-    const nombre = document.getElementById('nombre').value.trim();
-    const precio = parseFloat(document.getElementById('precio').value);
-    const cantidad = parseInt(document.getElementById('cantidad').value);
-    const codigo = document.getElementById('codigo').value.trim();
+  const usuario = localStorage.getItem("usuarioActivo");
 
-    if (!nombre || !codigo || isNaN(precio) || isNaN(cantidad)) {
-      alert("Completa todos los campos correctamente.");
-      return;
-    }
-
-    const producto = {
-      nombre,
-      precio,
-      cantidad,
-      codigo,
-      categoria: document.getElementById('categoria').value.trim(),
-      sucursal: document.getElementById('sucursal').value,
-      descripcion: document.getElementById('descripcion').value.trim()
-    };
-
-    const { error } = await supabase.from('productos').insert([producto]);
-
-    if (error) {
-      alert("Error al guardar el producto: " + error.message);
-    } else {
-      alert("Producto registrado correctamente.");
-      listarProductos(); // 👈 Actualiza la tabla
-      document.getElementById('form-producto').reset(); // Limpia el formulario
-    }
+  if (!usuario) {
+    alert("Error: usuario no identificado. Vuelve a iniciar sesión.");
+    return;
   }
+
+  const nombre = document.getElementById('nombre').value.trim();
+  const precio = parseFloat(document.getElementById('precio').value);
+  const cantidad = parseInt(document.getElementById('cantidad').value);
+  const codigo = document.getElementById('codigo').value.trim();
+
+  if (!nombre || !codigo || isNaN(precio) || isNaN(cantidad)) {
+    alert("Completa todos los campos correctamente.");
+    return;
+  }
+
+  const producto = {
+    nombre,
+    precio,
+    cantidad,
+    codigo,
+    categoria: document.getElementById('categoria').value.trim(),
+    sucursal: document.getElementById('sucursal').value,
+    descripcion: document.getElementById('descripcion').value.trim(),
+    usuario_productos: usuario // 👈 este valor será 'ADMIN', 'TIENDA1', etc.
+  };
+
+  const { error } = await supabase.from('productos').insert([producto]);
+
+  if (error) {
+    alert("Error al guardar el producto: " + error.message);
+  } else {
+    alert("Producto registrado correctamente.");
+    listarProductos(); // 👈 actualizar lista
+    document.getElementById('form-producto').reset();
+  }
+}
 
   async function listarProductos() {
-    const { data, error } = await supabase.from('productos').select('*');
+  const usuarioActivo = localStorage.getItem("usuarioActivo");
+  if (!usuarioActivo) return;
 
-    if (error) {
-      console.error("Error al obtener productos:", error.message);
-      return;
-    }
+  const { data, error } = await supabase
+    .from('productos')
+    .select('*')
+    .eq('usuario_productos', usuarioActivo);
 
-    const tbody = document.getElementById('lista-productos');
-    tbody.innerHTML = "";
-
-    data.forEach(p => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${p.nombre}</td>
-        <td>${p.precio}</td>
-        <td>${p.cantidad}</td>
-        <td>${p.codigo}</td>
-        <td>${p.categoria}</td>
-        <td>${p.sucursal}</td>
-        <td><button onclick="eliminarProducto(${p.id})" style="color:red;">Eliminar</button></td>
-      `;
-      tbody.appendChild(tr);
-    });
+  if (error) {
+    console.error("Error al obtener productos:", error.message);
+    return;
   }
+
+  const tbody = document.getElementById('lista-productos');
+  tbody.innerHTML = "";
+
+  data.forEach(p => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${p.nombre}</td>
+      <td>${p.precio}</td>
+      <td>${p.cantidad}</td>
+      <td>${p.codigo}</td>
+      <td>${p.categoria}</td>
+      <td>${p.sucursal}</td>
+      <td><button onclick="eliminarProducto(${p.id})" style="color:red;">Eliminar</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
 
   async function eliminarProducto(id) {
     if (!confirm("¿Deseas eliminar este producto?")) return;
@@ -736,31 +809,37 @@
   }
 
   async function listarProductosVenta() {
-    const { data, error } = await supabase.from("productos").select("*");
+  const usuarioActivo = localStorage.getItem("usuarioActivo");
+  if (!usuarioActivo) return;
 
-    if (error) {
-      console.error("❌ Error al cargar productos:", error.message);
-      return;
-    }
+  const { data, error } = await supabase
+    .from("productos")
+    .select("*")
+    .eq("usuario_productos", usuarioActivo);
 
-    const contenedor = document.getElementById("productos-venta");
-    if (!contenedor) return;
-
-    contenedor.innerHTML = "";
-
-    data.forEach(producto => {
-      const div = document.createElement("div");
-      div.className = "product-card";
-      div.innerHTML = `
-        <strong>${producto.nombre}</strong><br>
-        <small>${producto.categoria}</small><br>
-        Precio: S/ ${producto.precio.toFixed(2)}
-      `;
-      console.log(`Asignando click a producto: ${producto.nombre}`);
-      div.onclick = () => agregarAlCarrito(producto);
-      contenedor.appendChild(div);
-    });
+  if (error) {
+    console.error("❌ Error al cargar productos:", error.message);
+    return;
   }
+
+  const contenedor = document.getElementById("productos-venta");
+  if (!contenedor) return;
+
+  contenedor.innerHTML = "";
+
+  data.forEach(producto => {
+    const div = document.createElement("div");
+    div.className = "product-card";
+    div.innerHTML = `
+      <strong>${producto.nombre}</strong><br>
+      <small>${producto.categoria}</small><br>
+      Precio: S/ ${producto.precio.toFixed(2)}
+    `;
+    div.onclick = () => agregarAlCarrito(producto);
+    contenedor.appendChild(div);
+  });
+}
+
 
   // Variable global para almacenar el producto seleccionado al abrir el modal
 
@@ -963,6 +1042,122 @@
   window.cobrar = cobrar;
   window.eliminarProducto = eliminarProducto;
   window.agregarAlCarrito = agregarAlCarrito; // <-- ¡Añade esta línea!
+  window.cerrarCaja = cerrarCaja;
+
+let cajaActualId = null; // almacena la caja abierta actual
+
+document.getElementById('form-apertura').addEventListener('submit', async function (e) {
+  e.preventDefault();
+  const usuario = localStorage.getItem("usuarioActivo");
+  console.log("Usuario activo:", usuario);
+  const saldoInicial = parseFloat(document.getElementById('saldoInicial').value);
+  const sucursal = document.getElementById('sucursalCaja').value;
+
+  const { data, error } = await supabase.from('cajas').insert([{
+    usuario_id: usuario,
+    fecha_apertura: obtenerFechaLocalISO(),
+    saldo_inicial: saldoInicial,
+    estado: 'abierta',
+    sucursal: sucursal
+  }]).select().single();
+
+  if (error) {
+    alert('Error al abrir caja: ' + error.message);
+    return;
+  }
+
+  cajaActualId = data.id;
+  alert("✅ Caja abierta correctamente");
+  listarCajas();
+});
+
+function obtenerFechaLocalISO() {
+  const offsetMs = new Date().getTimezoneOffset() * 60000;
+  return new Date(Date.now() - offsetMs).toISOString();
+}
+
+async function cerrarCaja() {
+  if (!cajaActualId) {
+    alert("No hay caja abierta actualmente.");
+    return;
+  }
+
+  const { data: ventas, error: errorVentas } = await supabase
+    .from('registros_venta')
+    .select('total_venta')
+    .eq('caja_id', cajaActualId);
+
+  if (errorVentas) {
+    alert("Error al obtener ventas: " + errorVentas.message);
+    return;
+  }
+
+  const totalVentas = ventas.reduce((sum, v) => sum + parseFloat(v.total_venta), 0);
+
+  const { data: cajaActual, error: errorCajaActual } = await supabase
+  .from("cajas")
+  .select("saldo_inicial")
+  .eq("id", cajaActualId)
+  .single();
+
+  if (errorCajaActual) {
+    alert("Error al obtener saldo inicial de la caja");
+  return;
+  }
+
+
+  const { error } = await supabase
+    .from('cajas')
+    .update({
+      fecha_cierre: obtenerFechaLocalISO(),
+      saldo_final: totalVentas > 0 ? totalVentas : cajaActual.saldo_inicial,
+      ventas_totales: totalVentas,
+      estado: 'cerrada'
+    })
+    .eq('id', cajaActualId);
+
+  if (error) {
+    alert("Error al cerrar la caja: " + error.message);
+    return;
+  }
+
+  alert("✅ Caja cerrada exitosamente.");
+  cajaActualId = null;
+  listarCajas();
+}
+
+async function listarCajas() {
+  const { data, error } = await supabase.from('cajas').select('*').order('fecha_apertura', { ascending: false });
+  if (error) {
+    alert("Error al listar cajas: " + error.message);
+    return;
+  }
+
+  const tbody = document.getElementById("tabla-cajas");
+  tbody.innerHTML = "";
+
+  data.forEach(caja => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${new Date(caja.fecha_apertura).toLocaleString()}</td>
+      <td>${caja.saldo_inicial || '-'}</td>
+      <td>${caja.fecha_cierre ? new Date(caja.fecha_cierre).toLocaleString() : '-'}</td>
+      <td>${caja.saldo_final ?? '-'}</td>
+      <td>${caja.ventas_totales ?? '-'}</td>
+      <td>${caja.estado}</td>
+      <td>${caja.sucursal}</td>
+    `;
+    tbody.appendChild(tr);
+
+    // Detectar si esta caja está abierta
+    if (caja.estado === 'abierta') {
+      cajaActualId = caja.id;
+    }
+  });
+}
+
+document.addEventListener("DOMContentLoaded", listarCajas);
+
 
 </script>
 </body>
