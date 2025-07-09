@@ -1102,47 +1102,53 @@ async function listarHistorialPedidos() {
 
 
   async function guardarProducto() {
-  const usuario = localStorage.getItem("usuarioActivo");
+  const nombre = document.getElementById("nombreProducto").value.trim();
+  const precio = parseFloat(document.getElementById("precioProducto").value.trim());
+  const cantidad = parseInt(document.getElementById("cantidadProducto").value.trim());
+  const codigo = document.getElementById("codigoProducto").value.trim();
+  const categoria = document.getElementById("categoriaProducto").value.trim();
+  const sucursal = document.getElementById("sucursalProducto").value.trim();
+  const descripcion = document.getElementById("descripcionProducto").value.trim();
+  const usuarioActivo = JSON.parse(localStorage.getItem('usuario')); // ✅
 
-  if (!usuario) {
-    alert("Error: usuario no identificado. Vuelve a iniciar sesión.");
+  if (!nombre || isNaN(precio) || isNaN(cantidad) || !codigo || !categoria || !sucursal) {
+    alert("Por favor, completa todos los campos obligatorios.");
     return;
   }
 
-  const nombre = document.getElementById('nombre').value.trim();
-  const precio = parseFloat(document.getElementById('precio').value);
-  const cantidad = parseInt(document.getElementById('cantidad').value);
-  const codigo = document.getElementById('codigo').value.trim();
-
-  if (!nombre || !codigo || isNaN(precio) || isNaN(cantidad)) {
-    alert("Completa todos los campos correctamente.");
-    return;
-  }
-
-  const producto = {
-    nombre,
-    precio,
-    cantidad,
-    codigo,
-    categoria: document.getElementById('categoria').value.trim(),
-    sucursal: document.getElementById('sucursal').value,
-    descripcion: document.getElementById('descripcion').value.trim(),
-    usuario_productos: usuario // 👈 este valor será 'ADMIN', 'TIENDA1', etc.
-  };
-
-  const { error } = await supabase.from('productos').insert([producto]);
+  const { error } = await supabase.from('productos').insert([
+    {
+      nombre,
+      precio,
+      cantidad,
+      codigo,
+      categoria,
+      sucursal,
+      descripcion,
+      usuario_productos: usuarioActivo.usuario // ✅ AÑADIDO
+    }
+  ]);
 
   if (error) {
     alert("Error al guardar el producto: " + error.message);
-  } else {
-    alert("Producto registrado correctamente.");
-    listarProductos(); // 👈 actualizar lista
-    document.getElementById('form-producto').reset();
+    return;
   }
+
+  alert("✅ Producto guardado exitosamente");
+  document.getElementById("form-producto").reset();
+  listarProductos();
 }
 
+
   async function listarProductos() {
-  const { data, error } = await supabase.from('productos').select('*');
+  const usuarioActivo = localStorage.getItem("usuarioActivo");
+  if (!usuarioActivo) return;
+
+  const { data, error } = await supabase
+    .from('productos')
+    .select('*')
+    .eq('usuario_productos', usuarioActivo); // 🟢 usa el nombre del usuario
+
   if (error) return alert("Error al cargar productos");
 
   const tbody = document.getElementById('lista-productos');
@@ -1152,11 +1158,12 @@ async function listarHistorialPedidos() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td data-label="Nombre">${p.nombre}</td>
-      <td data-label="Descripción">${p.descripcion}</td>
       <td data-label="Precio">S/ ${p.precio}</td>
+      <td data-label="Cantidad">${p.cantidad}</td>
+      <td data-label="Código">${p.codigo}</td>
       <td data-label="Categoría">${p.categoria}</td>
-      <td data-label="Stock">${p.cantidad}</td>
-      <td data-label="Acción">
+      <td data-label="Sucursal">${p.sucursal}</td>
+      <td data-label="Acciones">
         <button onclick="eliminarProducto(${p.id})"
           style="background-color:red;color:white;padding:6px;border:none;border-radius:4px;cursor:pointer;">
           Eliminar
@@ -1166,8 +1173,6 @@ async function listarHistorialPedidos() {
     tbody.appendChild(tr);
   });
 }
-
-
 
   async function eliminarProducto(id) {
     if (!confirm("¿Deseas eliminar este producto?")) return;
