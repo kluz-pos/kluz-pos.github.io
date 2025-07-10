@@ -1370,16 +1370,42 @@ async function listarProductos() {
 }
 
   // Enlaza el formulario al evento de creación de usuario
-  document.addEventListener('DOMContentLoaded', () => { 
-  document.getElementById('btn-login')?.addEventListener('click', login);
+  document.addEventListener('DOMContentLoaded', () => {
+  const usuarioActivo = localStorage.getItem("usuarioActivo");
+  const permisos = JSON.parse(localStorage.getItem("permisosUsuario") || "[]");
+
+  if (usuarioActivo && permisos.length > 0) {
+    // ✅ Ya hay sesión: mostrar app directamente
+    document.getElementById('login').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+
+    const contenedor = document.getElementById("usuario-logueado");
+    if (contenedor) contenedor.textContent = `👤 Usuario: ${usuarioActivo}`;
+
+    aplicarPermisosDelUsuario({ permisos });
+
+    mostrarPanel("venta"); // Panel por defecto al restaurar sesión
+  } else {
+    // Si no hay sesión, se espera al login manual
+    document.getElementById('btn-login')?.addEventListener('click', login);
+  }
+
+  // ✅ Carga de datos general (funciona esté o no logueado)
   listarUsuarios(); 
   listarProductos();
-  listarCajas(); // ✅ Ya existe
+  listarCajas();
+  listarPlatosRestaurante();
+  mostrarPlatosMesas();
+  listarPedidos();
+  listarHistorialPedidos();
 
-  listarPlatosRestaurante(); // ✅ NUEVO: muestra platos en "Restaurante Atención"
-  mostrarPlatosMesas();      // ✅ NUEVO: carga productos en "Atención Mesas"
-  listarPedidos();           // ✅ NUEVO: muestra pedidos activos
-  listarHistorialPedidos(); // ✅ NUEVO: pedidos pagados (HISTORIAL)
+  const inputBusqueda = document.getElementById("busqueda-producto");
+  if (inputBusqueda) {
+    inputBusqueda.addEventListener("input", (e) => {
+      const valor = e.target.value.trim();
+      listarProductosVenta(valor);
+    });
+  }
 
   const form = document.querySelector('form[onsubmit*="crearUsuario"]');
   if (form) {
@@ -1396,21 +1422,6 @@ async function listarProductos() {
       guardarProducto();  
     });
   }
-
-  const activo = localStorage.getItem("usuarioActivo");
-  if (activo) {
-    const contenedor = document.getElementById("usuario-logueado");
-    if (contenedor) contenedor.textContent = `👤 Usuario: ${activo}`;
-  }
-
-  const inputBusqueda = document.getElementById("busqueda-producto");
-  if (inputBusqueda) {
-    inputBusqueda.addEventListener("input", (e) => {
-      const valor = e.target.value.trim();
-      listarProductosVenta(valor);
-    });
-  }
-
 });
 
 // aqui estaba el codigo -->
