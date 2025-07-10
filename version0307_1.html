@@ -246,8 +246,15 @@
       <h2>Punto de Venta</h2>
       <div class="venta-contenedor">
         <div class="venta-section">
-          <h3>PRODUCTOS</h3>
-          <div id="productos-venta" style="display: flex; flex-wrap: wrap; gap: 20px;"></div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+              <h3 style="margin: 0;">PRODUCTOS</h3>
+              <div style="position: relative; display: flex; align-items: center;">
+              <span style="position: absolute; left: 10px; font-size: 1rem; color: #888;">🔍</span>
+              <input type="text" id="busqueda-producto" placeholder="Buscar producto..."
+                      style="padding: 6px 12px 6px 32px; font-size: 0.9rem; border-radius: 20px; border: 1px solid #ccc; width: 200px;">
+              </div>
+          </div>
+          <div id="productos-venta" style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 10px;"></div> 
         </div>
         <div class="venta-section">
           <h3>CARRITO</h3>
@@ -929,77 +936,55 @@ async function listarHistorialPedidos() {
   });
 }
 
+let cajaActualId = null; // almacena la caja abierta actual
+
   async function cobrar() {
-    if (carrito.length === 0) {
-        alert("No hay productos en el carrito.");
-        return;
+  try {
+    if (!cajaActualId) {
+      alert("⚠️ No hay caja abierta. Debes abrir una caja antes de cobrar.");
+      return;
     }
 
-    // ✅ Nuevo: Calcular el total sumando (precio * cantidadEnCarrito)
-    let total = carrito.reduce((sum, p) => sum + (p.precio * p.cantidadEnCarrito), 0);
-
-    // Agrupar productos por ID para sumar las cantidades a vender de cada uno
-    // No necesitas un nuevo Map si ya tienes 'cantidadEnCarrito' en cada item del carrito
-    // Puedes iterar directamente sobre el 'carrito' actual.
-    // La lógica de `productosParaActualizar` que tenías antes no es necesaria si ya gestionas
-    // la cantidad por producto en el mismo objeto del carrito.
-
-    // Paso 1: Validar y Actualizar el inventario por cada producto en el carrito
-    for (const item of carrito) { // Itera directamente sobre el carrito
-        // Obtener la cantidad actual del producto en el inventario desde Supabase
-        const { data: productoInventario, error: errorInventario } = await supabase
-            .from('productos')
-            .select('nombre, cantidad')
-            .eq('id', item.id) // Usa item.id
-            .single();
-
-        if (errorInventario || !productoInventario) {
-            console.error(`Error al obtener cantidad para producto ID ${item.id}:`, errorInventario?.message || 'Producto no encontrado.');
-            alert(`Hubo un error al procesar un producto. Venta no completada.`);
-            return;
-        }
-
-        // ✅ Modificación clave aquí: restar 'item.cantidadEnCarrito'
-        const nuevaCantidad = productoInventario.cantidad - item.cantidadEnCarrito;
-
-        if (nuevaCantidad < 0) {
-            alert(`No hay suficiente stock para ${productoInventario.nombre}. Se intentaron vender ${item.cantidadEnCarrito}, pero solo hay ${productoInventario.cantidad}. Venta cancelada.`);
-            return;
-        }
-
-        // Actualizar la cantidad en la base de datos
-        const { error: updateError } = await supabase
-            .from('productos')
-            .update({ cantidad: nuevaCantidad })
-            .eq('id', item.id); // Usa item.id
-
-        if (updateError) {
-            console.error(`Error al actualizar el stock de ${productoInventario.nombre}:`, updateError.message);
-            alert(`Error al actualizar el inventario para ${productoInventario.nombre}. Venta no completada.`);
-            return;
-        }
+    if (!carrito || carrito.length === 0) {
+      alert("El carrito está vacío.");
+      return;
     }
 
-    const { error: insertVentaError } = await supabase.from("registros_venta").insert([{
-    caja_id: cajaActualId, // 👈 importante para el cierre de caja
-    fecha_venta: obtenerFechaLocalISO(),
-    total_venta: total,
-    detalle_producto: carrito, // como JSON
-    usuario_id: localStorage.getItem("usuarioActivo")
-    }]);
+    const totalVenta = carrito.reduce((acc, item) => acc + item.precio * item.cantidadEnCarrito, 0);
+    const usuario = localStorage.getItem("usuarioActivo");
 
-    if (insertVentaError) {
-    alert("Error al registrar la venta: " + insertVentaError.message);
-    return;
+    const detalle = carrito.map(item => ({
+      nombre: item.nombre,
+      precio: item.precio,
+      cantidad: item.cantidadEnCarrito
+    }));
+
+    const { error } = await supabase.from("registros_venta").insert([
+      {
+        caja_id: cajaActualId,
+        fecha_venta: obtenerFechaLocalISO(),
+        total_venta: totalVenta,
+        usuario_id: usuario,
+        detalle_productos: detalle
+      }
+    ]);
+
+    if (error) {
+      console.error("Error al insertar venta:", error.message);
+      alert("Error al registrar la venta: " + error.message);
+      return;
     }
 
-    alert(`✅ Venta registrada por S/ ${total.toFixed(2)}. Inventario actualizado.`);
+    alert("✅ Venta registrada con éxito");
 
-    // Limpiar carrito y actualizar la vista del carrito
+    // Limpiar carrito
     carrito = [];
     actualizarCarrito();
-    listarProductosVenta(); // Para actualizar el stock visible de los productos
-    listarProductos(); // Para actualizar la tabla de inventario
+
+  } catch (e) {
+    console.error("Error inesperado en cobrar():", e);
+    alert("Error inesperado: " + e.message);
+  }
 }
 
     async function crearUsuario() {
@@ -1102,14 +1087,14 @@ async function listarHistorialPedidos() {
 
 
   async function guardarProducto() {
-  const nombre = document.getElementById("nombreProducto").value.trim();
-  const precio = parseFloat(document.getElementById("precioProducto").value.trim());
-  const cantidad = parseInt(document.getElementById("cantidadProducto").value.trim());
-  const codigo = document.getElementById("codigoProducto").value.trim();
-  const categoria = document.getElementById("categoriaProducto").value.trim();
-  const sucursal = document.getElementById("sucursalProducto").value.trim();
-  const descripcion = document.getElementById("descripcionProducto").value.trim();
-  const usuarioActivo = JSON.parse(localStorage.getItem('usuario')); // ✅
+  const nombre = document.getElementById("nombre").value.trim();
+  const precio = parseFloat(document.getElementById("precio").value.trim());
+  const cantidad = parseInt(document.getElementById("cantidad").value.trim());
+  const codigo = document.getElementById("codigo").value.trim();
+  const categoria = document.getElementById("categoria").value.trim();
+  const sucursal = document.getElementById("sucursal").value.trim();
+  const descripcion = document.getElementById("descripcion").value.trim();
+  const usuarioActivo = localStorage.getItem('usuarioActivo'); // ✅ CORRECTO
 
   if (!nombre || isNaN(precio) || isNaN(cantidad) || !codigo || !categoria || !sucursal) {
     alert("Por favor, completa todos los campos obligatorios.");
@@ -1125,7 +1110,7 @@ async function listarHistorialPedidos() {
       categoria,
       sucursal,
       descripcion,
-      usuario_productos: usuarioActivo.usuario // ✅ AÑADIDO
+      usuario_productos: usuarioActivo // ✅ CORRECTO
     }
   ]);
 
@@ -1139,8 +1124,7 @@ async function listarHistorialPedidos() {
   listarProductos();
 }
 
-
-  async function listarProductos() {
+async function listarProductos() {
   const usuarioActivo = localStorage.getItem("usuarioActivo");
   if (!usuarioActivo) return;
 
@@ -1182,11 +1166,11 @@ async function listarHistorialPedidos() {
     }
   }
 
-  async function listarProductosVenta() {
+  async function listarProductosVenta(filtro = "") {
   const usuarioActivo = localStorage.getItem("usuarioActivo");
   if (!usuarioActivo) return;
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("productos")
     .select("*")
     .eq("usuario_productos", usuarioActivo);
@@ -1194,6 +1178,15 @@ async function listarHistorialPedidos() {
   if (error) {
     console.error("❌ Error al cargar productos:", error.message);
     return;
+  }
+
+  if (filtro) {
+    const filtroMin = filtro.toLowerCase();
+    data = data.filter(p =>
+      p.nombre.toLowerCase().includes(filtroMin) ||
+      (p.categoria && p.categoria.toLowerCase().includes(filtroMin)) ||
+      (p.codigo && p.codigo.toLowerCase().includes(filtroMin))
+    );
   }
 
   const contenedor = document.getElementById("productos-venta");
@@ -1213,7 +1206,6 @@ async function listarHistorialPedidos() {
     contenedor.appendChild(div);
   });
 }
-
 
   // Variable global para almacenar el producto seleccionado al abrir el modal
 
@@ -1401,7 +1393,7 @@ async function listarHistorialPedidos() {
   if (formProducto) {
     formProducto.addEventListener('submit', (e) => {
       e.preventDefault();
-      guardarProducto();
+      guardarProducto();  
     });
   }
 
@@ -1410,11 +1402,18 @@ async function listarHistorialPedidos() {
     const contenedor = document.getElementById("usuario-logueado");
     if (contenedor) contenedor.textContent = `👤 Usuario: ${activo}`;
   }
+
+  const inputBusqueda = document.getElementById("busqueda-producto");
+  if (inputBusqueda) {
+    inputBusqueda.addEventListener("input", (e) => {
+      const valor = e.target.value.trim();
+      listarProductosVenta(valor);
+    });
+  }
+
 });
 
 // aqui estaba el codigo -->
-
-let cajaActualId = null; // almacena la caja abierta actual
 
 document.getElementById('form-apertura').addEventListener('submit', async function (e) {
   e.preventDefault();
