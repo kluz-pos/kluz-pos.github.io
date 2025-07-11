@@ -495,17 +495,17 @@
         <div class="form-usuario-grid">
           <div class="form-usuario-group">
             <label for="nuevoUsuario">Nombre de Usuario</label>
-            <input type="text" id="nuevoUsuario" required>
+            <input type="text" id="nuevo-usuario" placeholder="Nombre de Usuario" required>
           </div>
           <div class="form-usuario-group">
             <label for="nuevaContrasena">Contraseña</label>
-            <input type="password" id="nuevaContrasena" required class="input-usuario">
+            <input type="password" id="nueva-clave" placeholder="Contraseña" required>
 
           </div>
 
           <div class="form-usuario-group">
               <label for="fechaExpiracion">Fecha de Expiración</label>
-              <input type="date" id="fechaExpiracion">
+              <input type="date" id="fecha-expiracion">
           </div>
 
         </div>
@@ -534,9 +534,10 @@
         <th>Usuario</th>
         <th>Permisos</th>
         <th>Expira</th>
-        <th>Acciones</th> </tr>
+       <th>Acciones</th>
+      </tr>
     </thead>
-    <tbody id="tabla-usuarios"></tbody>
+  <tbody id="tabla-usuarios"></tbody>
   </table>
   </div>
 </div>
@@ -1040,83 +1041,99 @@ let cajaActualId = null; // almacena la caja abierta actual
   }
 }
 
-    async function crearUsuario() {
-    const usuario = document.getElementById("nuevoUsuario").value.trim();
-    const contrasena = document.getElementById("nuevaContrasena").value.trim();
-    const fechaExpiracion = document.getElementById("fechaExpiracion").value;
+async function listarUsuarios() {
+  try {
+    const { data, error } = await supabase.from("usuarios").select("*");
 
-    const checkboxes = document.querySelectorAll("#permisos input[type='checkbox']:checked");
-    const permisos = Array.from(checkboxes).map(cb => cb.value);
+    if (error) throw error;
 
-    if (!usuario || !contrasena || permisos.length === 0) {
-      alert("❗ Por favor, completa todos los campos y selecciona al menos un permiso.");
+    const tabla = document.getElementById("tabla-usuarios");
+    tabla.innerHTML = ""; // Limpiar tabla
+
+    data.forEach(usuario => {
+      const fila = document.createElement("tr");
+
+      const permisosTexto = Array.isArray(usuario.permisos)
+        ? usuario.permisos.join(", ")
+        : "";
+
+      let fechaExp = "Sin límite";
+      if (usuario.fecha_expiracion) {
+        const fecha = new Date(usuario.fecha_expiracion);
+        fechaExp = fecha.toLocaleDateString("es-PE", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit"
+        });
+      }
+
+      fila.innerHTML = `
+        <td>${usuario.usuario}</td>
+        <td>${permisosTexto}</td>
+        <td>${fechaExp}</td>
+        <td><button onclick="eliminarUsuarioPorNombre('${usuario.usuario}')" class="btn-rojo">Eliminar</button></td>
+      `;
+
+      tabla.appendChild(fila);
+    });
+
+  } catch (err) {
+    alert("❌ Error al listar usuarios: " + err.message);
+  }
+}
+
+  async function crearUsuario() {
+  const nombre = document.getElementById("nuevo-usuario").value.trim();
+  const clave = document.getElementById("nueva-clave").value.trim();
+  const fechaExp = document.getElementById("fecha-expiracion").value;
+  const permisosSeleccionados = document.querySelectorAll('input.permiso:checked');
+  const permisos = Array.from(permisosSeleccionados).map(p => p.value);
+
+
+  // Validación básica
+  if (!nombre || !clave || permisos.length === 0) {
+    alert("❗ Por favor, completa todos los campos y selecciona al menos un permiso.");
+    return;
+  }
+
+  try {
+    // Verificar si ya existe el usuario
+    const { data: existente, error: errorExistente } = await supabase
+      .from("usuarios")
+      .select("usuario")
+      .eq("usuario", nombre)
+      .single();
+
+    if (existente) {
+      alert("❗ El nombre de usuario ya está registrado. Por favor usa uno diferente.");
       return;
     }
 
+    // Insertar nuevo usuario
     const { error } = await supabase.from("usuarios").insert([{
-      usuario,
-      contrasena,
-      permisos,
-      fecha_expiracion: fechaExpiracion || null
+      usuario: nombre,
+      contrasena: clave,
+      permisos: permisos,
+      fecha_expiracion: fechaExp ? new Date(fechaExp) : null
     }]);
 
     if (error) {
-      alert("❌ Error al crear usuario: " + error.message);
-      return;
+      throw error;
     }
 
     alert("✅ Usuario creado exitosamente.");
-    document.getElementById("form-crear-usuario").reset();
-    listarUsuarios();
+    document.getElementById("nuevo-usuario").value = "";
+    document.getElementById("nueva-clave").value = "";
+    document.getElementById("fecha-expiracion").value = "";
+    document.querySelectorAll('input[name="permisos"]').forEach(el => el.checked = false);
+    listarUsuarios(); // Refrescar lista
+
+  } catch (err) {
+    alert("❌ Error al crear usuario: " + err.message);
   }
+}
 
-    async function listarUsuarios() {
-    const { data, error } = await supabase.from('usuarios').select('*');
-    if (error) {
-      alert("❌ Error al cargar usuarios");
-      return;
-    }
 
-    const tbody = document.getElementById('tabla-usuarios');
-    tbody.innerHTML = '';
-
-    data.forEach(u => {
-      const tr = document.createElement('tr');
-
-      const tdUsuario = document.createElement('td');
-      tdUsuario.setAttribute("data-label", "Usuario");
-      tdUsuario.textContent = u.usuario;
-
-      const tdPermisos = document.createElement('td');
-      tdPermisos.setAttribute("data-label", "Permisos");
-      tdPermisos.textContent = Array.isArray(u.permisos)
-        ? u.permisos.join(', ')
-        : (u.permisos || '');
-
-      const tdExpira = document.createElement('td');
-      tdExpira.setAttribute("data-label", "Expira");
-      tdExpira.textContent = u.fecha_expiracion
-        ? new Date(u.fecha_expiracion).toLocaleDateString()
-        : 'Sin límite';
-
-      const tdAcciones = document.createElement('td');
-      tdAcciones.setAttribute("data-label", "Acción");
-
-      const btnEliminar = document.createElement('button');
-      btnEliminar.textContent = 'Eliminar';
-      btnEliminar.style = "background-color:red;color:white;padding:6px;border:none;border-radius:4px;cursor:pointer;";
-      btnEliminar.addEventListener('click', () => eliminarUsuarioPorNombre(u.usuario));
-
-      tdAcciones.appendChild(btnEliminar);
-
-      tr.appendChild(tdUsuario);
-      tr.appendChild(tdPermisos);
-      tr.appendChild(tdExpira); // ✅ NUEVA COLUMNA
-      tr.appendChild(tdAcciones);
-
-      tbody.appendChild(tr);
-    });
-  }
 
 
   window.eliminarUsuarioPorNombre = async function(nombre) {
