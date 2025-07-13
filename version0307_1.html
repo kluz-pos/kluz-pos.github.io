@@ -213,7 +213,14 @@
     font-weight: bold;
   }
 }
-    </style>
+
+.checkbox-inline {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+ </style>
 </head>
 <body>
 <div id="login" class="login">
@@ -384,6 +391,18 @@
           <textarea id="descripcion" class="textarea-descripcion" placeholder="Descripción del producto..."></textarea>
         </div>
 
+        <div class="form-group checkbox-inline">
+            <label for="por-kilo">¿Se vende por kilo?</label>
+            <input type="checkbox" id="por-kilo" style="transform: scale(1.5); margin-left: 10px;">
+        </div>
+        <div class="form-group" id="kilos-group" style="display:none">
+            <label>Kilos por unidad</label>
+            <input type="number" id="kilos" step="0.01">
+
+            <label>Precio por kilo</label>
+            <input type="number" id="precio-kilo" step="0.01" min="0">
+        </div>
+
         <div class="form-group form-full">
           <button type="submit" class="btn-registrar">Registrar Producto</button>
         </div>
@@ -402,15 +421,16 @@
     </h3>
     <table>
       <thead>
-        <tr>
-          <th>Nombre</th>
-          <th>Precio</th>
-          <th>Cantidad</th>
-          <th>Código</th>
-          <th>Categoría</th>
-          <th>Sucursal</th>
-          <th>Acciones</th>
-        </tr>
+          <tr>
+            <th>Nombre</th>
+            <th>Precio</th>
+            <th>Cantidad</th>
+            <th>Total_Kg</th>
+            <th>Código</th>
+            <th>Categoría</th>
+            <th>Sucursal</th>
+            <th>Acciones</th>
+          </tr>
       </thead>
       <tbody id="lista-productos"></tbody>
     </table>
@@ -648,6 +668,10 @@
 
 </script>
 <script type="module">
+
+  let productoSeleccionado = null;
+  let modoSeleccionado = 'unidad';
+
   import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
   // ✅ Tus credenciales reales
@@ -862,6 +886,7 @@ async function cobrarPedido(id, platos) {
     total_venta: total,
     detalle_productos: productosLimpios, // Array limpio y validado
     usuario_id: usuario
+
   }]);
 
   if (errorVenta) {
@@ -978,67 +1003,91 @@ async function listarHistorialPedidos() {
 let cajaActualId = null; // almacena la caja abierta actual
 
   async function cobrar() {
-  try {
-    if (!cajaActualId) {
-      alert("⚠️ No hay caja abierta. Debes abrir una caja antes de cobrar.");
-      return;
-    }
-
-    if (!carrito || carrito.length === 0) {
-      alert("El carrito está vacío.");
-      return;
-    }
-
-    const totalVenta = carrito.reduce((acc, item) => acc + item.precio * item.cantidadEnCarrito, 0);
-    const usuario = localStorage.getItem("usuarioActivo");
-
-    const detalle = carrito.map(item => ({
-      nombre: item.nombre,
-      precio: item.precio,
-      cantidad: item.cantidadEnCarrito
-    }));
-
-    const { error } = await supabase.from("registros_venta").insert([
-      {
-        caja_id: cajaActualId,
-        fecha_venta: obtenerFechaLocalISO(),
-        total_venta: totalVenta,
-        usuario_id: usuario,
-        detalle_productos: detalle
-      }
-    ]);
-
-    if (error) {
-      console.error("Error al insertar venta:", error.message);
-      alert("Error al registrar la venta: " + error.message);
-      return;
-    }
-
-    // 🔽 DESCONTAR STOCK
-    for (const item of carrito) {
-      const cantidadVendida = item.cantidadEnCarrito;
-      const nuevoStock = item.cantidad - cantidadVendida;
-
-      const { error: errorStock } = await supabase
-        .from("productos")
-        .update({ cantidad: nuevoStock })
-        .eq("id", item.id);
-
-      if (errorStock) {
-        console.warn(`❌ Error al actualizar stock de ${item.nombre}:`, errorStock.message);
-      }
-    }
-
-    alert("✅ Venta registrada con éxito");
-
-    carrito = [];
-    actualizarCarrito();
-    listarProductos(); // ✅ Actualizar inventario visual
-
-  } catch (e) {
-    console.error("Error inesperado en cobrar():", e);
-    alert("Error inesperado: " + e.message);
+  if (carrito.length === 0) {
+    alert("🛒 El carrito está vacío.");
+    return;
   }
+
+  const usuarioActivo = localStorage.getItem("usuarioActivo");
+  if (!usuarioActivo) {
+    alert("⚠️ No se pudo identificar al usuario activo.");
+    return;
+  }
+
+  let totalVenta = 0;
+  const detalleVenta = [];
+
+  for (const item of carrito) {
+    const cantidadVendida = item.cantidadEnCarrito;
+    const subtotal = item.precio * cantidadVendida;
+    totalVenta += subtotal;
+
+    detalleVenta.push({
+      producto_id: item.id,
+      nombre: item.nombre,
+      cantidad: cantidadVendida,
+      precio_unitario: item.precio,
+      modo: item.modoVenta,
+      subtotal: subtotal
+    });
+
+    // 🔁 Descuento de inventario según tipo de venta
+    let nuevoStock = item.cantidad;
+    let nuevoTotalKilos = item.total_kilos ?? 0;
+
+if (item.por_kilo && item.modoVenta === "kilo") {
+  const kilosVendidos = cantidadVendida;
+
+  // Descuenta kilos
+  nuevoTotalKilos -= kilosVendidos;
+  if (nuevoTotalKilos < 0) nuevoTotalKilos = 0;
+
+  // 🔁 Recalcula cuántas unidades completas quedan según el total_kilos restante
+  const unidadesRecalculadas = Math.floor(nuevoTotalKilos / item.kilos_por_unidad);
+
+  // 🔄 Se actualiza el nuevo stock con ese cálculo
+  nuevoStock = unidadesRecalculadas;
+} else {
+      nuevoStock -= cantidadVendida;
+      if (nuevoStock < 0) nuevoStock = 0;
+    }
+
+    // Actualizar stock en Supabase
+    const { error: errorStock } = await supabase
+      .from("productos")
+      .update({
+        cantidad: nuevoStock,
+        total_kilos: nuevoTotalKilos
+      })
+      .eq("id", item.id);
+
+    if (errorStock) {
+      console.warn(`❌ Error al actualizar stock de ${item.nombre}:`, errorStock.message);
+    }
+  }
+
+  // Guardar la venta en la tabla registros_venta
+  const { error: errorVenta } = await supabase.from("registros_venta").insert([
+  {
+    fecha_venta: new Date().toISOString(),
+    total_venta: totalVenta,
+    detalle_productos: detalleVenta,
+    usuario_id: usuarioActivo,
+    caja_id: cajaActualId // ✅ importante
+
+  }
+  ]);
+
+  if (errorVenta) {
+    alert("❌ Error al guardar la venta.");
+    console.error("Detalle:", errorVenta.message);
+    return;
+  }
+
+  alert("✅ Venta registrada con éxito.");
+  carrito = [];
+  actualizarCarrito();
+  listarProductos(); // Para actualizar la vista del inventario
 }
 
 async function listarUsuarios() {
@@ -1159,7 +1208,7 @@ async function listarUsuarios() {
   };
 
 
-  async function guardarProducto() {
+async function guardarProducto() {
   const nombre = document.getElementById("nombre").value.trim();
   const precio = parseFloat(document.getElementById("precio").value.trim());
   const cantidad = parseInt(document.getElementById("cantidad").value.trim());
@@ -1167,25 +1216,33 @@ async function listarUsuarios() {
   const categoria = document.getElementById("categoria").value.trim();
   const sucursal = document.getElementById("sucursal").value.trim();
   const descripcion = document.getElementById("descripcion").value.trim();
-  const usuarioActivo = localStorage.getItem('usuarioActivo'); // ✅ CORRECTO
+  const usuarioActivo = localStorage.getItem('usuarioActivo');
+
+  const porKilo = document.getElementById("por-kilo").checked;
+  const kilosPorUnidad = porKilo ? parseFloat(document.getElementById("kilos").value.trim()) : 0;
+  const precioPorKilo = porKilo ? parseFloat(document.getElementById("precio-kilo").value.trim()) : 0;
+  const totalKilos = porKilo ? cantidad * kilosPorUnidad : 0;
+
 
   if (!nombre || isNaN(precio) || isNaN(cantidad) || !codigo || !categoria || !sucursal) {
     alert("Por favor, completa todos los campos obligatorios.");
     return;
   }
 
-  const { error } = await supabase.from('productos').insert([
-    {
-      nombre,
-      precio,
-      cantidad,
-      codigo,
-      categoria,
-      sucursal,
-      descripcion,
-      usuario_productos: usuarioActivo // ✅ CORRECTO
-    }
-  ]);
+  const { error } = await supabase.from('productos').insert([{
+    nombre,
+    precio,
+    cantidad,
+    codigo,
+    categoria,
+    sucursal,
+    descripcion,
+    por_kilo: porKilo,
+    kilos_por_unidad: kilosPorUnidad,
+    total_kilos: totalKilos,
+    precio_kilo: precioPorKilo,
+    usuario_productos: usuarioActivo
+  }]);
 
   if (error) {
     alert("Error al guardar el producto: " + error.message);
@@ -1194,6 +1251,7 @@ async function listarUsuarios() {
 
   alert("✅ Producto guardado exitosamente");
   document.getElementById("form-producto").reset();
+  document.getElementById("kilos-group").style.display = 'none';
   listarProductos();
 }
 
@@ -1208,7 +1266,6 @@ async function listarProductos(filtro = "") {
 
   if (error) return alert("Error al cargar productos");
 
-  // 🔍 Filtrado local si hay término
   if (filtro) {
     const f = filtro.toLowerCase();
     data = data.filter(p =>
@@ -1223,10 +1280,12 @@ async function listarProductos(filtro = "") {
 
   data.forEach(p => {
     const tr = document.createElement('tr');
+    const totalKilosTexto = p.por_kilo ? (p.total_kilos?.toFixed(2) + " kg") : "-";
     tr.innerHTML = `
       <td data-label="Nombre">${p.nombre}</td>
-      <td data-label="Precio">S/ ${p.precio}</td>
+      <td data-label="Precio">S/ ${p.precio.toFixed(2)}</td>
       <td data-label="Cantidad">${p.cantidad}</td>
+      <td data-label="Total_Kg">${totalKilosTexto}</td>
       <td data-label="Código">${p.codigo}</td>
       <td data-label="Categoría">${p.categoria}</td>
       <td data-label="Sucursal">${p.sucursal}</td>
@@ -1294,34 +1353,57 @@ async function listarProductos(filtro = "") {
 
   // Modifica agregarAlCarrito para mostrar el modal
   function agregarAlCarrito(producto) {
-    console.log(`Intentando agregar producto al carrito: ${producto.nombre}`);
+  console.log(`Intentando agregar producto al carrito: ${producto.nombre}`);
 
-    // Buscar si el producto ya está en el carrito
-    const productoExistente = carrito.find(item => item.id === producto.id);
-
-    if (productoExistente) {
-        // Si ya está en el carrito, incrementa la cantidad (si hay stock)
-        // 'producto.cantidad' es el stock disponible del producto original
-        if (productoExistente.cantidadEnCarrito < producto.cantidad) {
-            productoExistente.cantidadEnCarrito++;
-            // No es necesario alertar, la UI del carrito lo mostrará
-        } else {
-            alert(`No hay suficiente stock para añadir más ${producto.nombre}. Stock disponible: ${producto.cantidad}`);
-        }
-    } else {
-        // Si no está en el carrito, añádelo con cantidad 1
-        if (producto.cantidad > 0) { // Solo añadir si hay stock inicial
-            // Añade una nueva propiedad 'cantidadEnCarrito'
-            carrito.push({ ...producto, cantidadEnCarrito: 1 });
-            // No es necesario alertar
-        } else {
-            alert(`"${producto.nombre}" está agotado.`);
-        }
-    }
-
-    // Siempre actualiza la visualización del carrito después de cualquier cambio
-    actualizarCarrito();
+  if (producto.por_kilo) {
+    // Guardamos el producto seleccionado globalmente para usarlo después
+    productoSeleccionado = producto;
+    document.getElementById("modal-titulo").textContent = `Agregar ${producto.nombre}`;
+    document.getElementById("modo-venta").value = "unidad";
+    document.getElementById("modal-venta").style.display = "flex";
+  } else {
+    agregarProductoCarrito(producto, "unidad");
+  }
 }
+
+
+
+function confirmarAgregarProducto() {
+  const modo = document.getElementById("modo-venta").value;
+  cerrarModal();
+  agregarProductoCarrito(productoSeleccionado, modo);
+}
+
+function cerrarModal() {
+  document.getElementById("modal-venta").style.display = "none";
+}
+
+function agregarProductoCarrito(producto, modo) {
+  const yaEnCarrito = carrito.find(p => p.id === producto.id && p.modoVenta === modo);
+
+  const precioCorrecto = modo === "kilo" ? producto.precio_kilo : producto.precio;
+
+  if (yaEnCarrito) {
+    // Incrementar si hay stock suficiente
+    if (yaEnCarrito.cantidadEnCarrito < producto.cantidad) {
+      yaEnCarrito.cantidadEnCarrito++;
+    } else {
+      alert(`No hay suficiente stock para agregar más de ${producto.nombre}.`);
+    }
+  } else {
+    const nuevoItem = {
+      ...producto,
+      cantidadEnCarrito: 1,
+      modoVenta: modo,
+      precio: precioCorrecto  // ✅ importante
+    };
+
+    carrito.push(nuevoItem);
+  }
+
+  actualizarCarrito();
+}
+
 
   function actualizarCarrito() {
     const lista = document.getElementById('carrito-lista'); // ✅ Asegúrate que este ID exista en tu HTML
@@ -1356,7 +1438,8 @@ async function listarProductos(filtro = "") {
 
         // Crear el texto del producto
         const textoProducto = document.createElement('span');
-        textoProducto.textContent = `${p.nombre} (S/ ${p.precio.toFixed(2)} c/u)`;
+        const tipo = p.modoVenta === "kilo" ? "kg" : "unidad";
+        textoProducto.textContent = `${p.nombre} (S/ ${p.precio.toFixed(2)} por ${tipo})`;
         li.appendChild(textoProducto);
 
         // Contenedor para cantidad y botones
@@ -1518,6 +1601,10 @@ async function listarProductos(filtro = "") {
 
 // aqui estaba el codigo -->
 
+document.getElementById('por-kilo').addEventListener('change', function () {
+  document.getElementById('kilos-group').style.display = this.checked ? 'block' : 'none';
+});
+
 document.getElementById('form-apertura').addEventListener('submit', async function (e) {
   e.preventDefault();
   const usuario = localStorage.getItem("usuarioActivo");
@@ -1550,7 +1637,7 @@ function obtenerFechaLocalISO() {
 
 async function cerrarCaja() {
   if (!cajaActualId) {
-    alert("No hay caja abierta actualmente.");
+    alert("⚠️ No hay caja abierta actualmente.");
     return;
   }
 
@@ -1654,7 +1741,25 @@ document.addEventListener("DOMContentLoaded", listarCajas);
   window.registrarPedido = registrarPedido;
   window.eliminarPedido = eliminarPedido;
   window.cobrarPedido = cobrarPedido;
+  window.confirmarAgregarProducto = confirmarAgregarProducto;
+  window.cerrarModal = cerrarModal;
 
 </script>
+
+<!-- Modal para elegir tipo de venta -->
+<div id="modal-venta" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+  background-color:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:1000;">
+  <div style="background:white; padding:30px; border-radius:10px; text-align:center; min-width:300px;">
+    <h3 id="modal-titulo"></h3>
+    <label for="modo-venta">¿Cómo deseas vender este producto?</label><br><br>
+    <select id="modo-venta" style="padding:10px;">
+      <option value="unidad">Por unidad</option>
+      <option value="kilo">Por kilo</option>
+    </select><br><br>
+    <button onclick="confirmarAgregarProducto()">Confirmar</button>
+    <button onclick="cerrarModal()" style="margin-left:10px;">Cancelar</button>
+  </div>
+</div>
+
 </body>
 </html>
