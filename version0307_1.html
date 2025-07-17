@@ -220,6 +220,46 @@
   margin-bottom: 16px;
 }
 
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.card {
+  background-color: white;
+  padding: 1rem;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+.card h3 {
+  margin-bottom: 0.5rem;
+}
+
+.panel {
+  display: none;
+}
+.panel:not(.hidden) {
+  display: block;
+}
+
+.card-dashboard {
+    background: #fff;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.08);
+    width: 250px;
+}
+
+.resumen-box {
+  border: 1px solid #ccc;
+  padding: 1rem;
+  margin-top: 1rem;
+  background-color: #fff;
+  border-radius: 8px;
+}
+
  </style>
 </head>
 <body>
@@ -237,7 +277,7 @@
      style="height: 60px; object-fit: contain; margin-bottom: 20px;">
     <button onclick="mostrarPanel('venta')">🛒 Punto de Venta</button>
     <button onclick="mostrarPanel('inventario')">📦 Inventario</button>
-    <button onclick="mostrarPanel('reportes')">📊 Reportes</button>
+    <button onclick="mostrarPanel('dashboard')">📈 Dashboard</button>
     <button onclick="mostrarPanel('clientes')">👥 Clientes</button>
     <button onclick="mostrarPanel('configuracion')">⚙️ Configuración</button>
     <button onclick="mostrarPanel('caja')">💰 Gestión de Caja</button>
@@ -348,7 +388,7 @@
             height: 80px;
             resize: none; /* Puedes poner none para bloquear el cambio manual */
         }
-
+        
       </style>
 
       <div class="form-grid">
@@ -449,8 +489,22 @@
       <p>Gestion por implementar.</p>
     </div>
 
-    <div id="configuracion" class="panel hidden">
-      <h2>Configuraci贸n</h2>
+<div id="dashboard" class="panel hidden">
+  <h2>📊 Resumen del Día</h2>
+  <p><strong>Ventas del día:</strong> <span id="ventas-dia">Cargando...</span></p>
+
+  <h3>🔥 Productos más vendidos</h3>
+  <ul id="productos-populares"></ul>
+
+  <h3>⚠️ Productos con bajo stock</h3>
+  <ul id="stock-bajo"></ul>
+
+  <h3>📈 Ingresos por mes</h3>
+  <canvas id="grafico-ventas" style="width: 100%; height: 400px;"></canvas>
+</div>
+
+  <div id="configuracion" class="panel hidden">
+      <h2>Configuración</h2>
       <p>Opciones de sistema por implementar.</p>
     </div>
   </div>
@@ -534,7 +588,7 @@
         <div class="permiso-checkboxes">
           <label><input type="checkbox" class="permiso" value="venta"> Punto de Venta</label>
           <label><input type="checkbox" class="permiso" value="inventario"> Inventario</label>
-          <label><input type="checkbox" class="permiso" value="reportes"> Reportes</label>
+          <label><input type="checkbox" class="permiso" value="dashboard"> Dashboard</label>
           <label><input type="checkbox" class="permiso" value="clientes"> Clientes</label>
           <label><input type="checkbox" class="permiso" value="configuracion"> Configuración</label>
           <label><input type="checkbox" class="permiso" value="caja"> Gestión de Caja</label>
@@ -647,6 +701,8 @@
 
 </div>
 
+<div id="contenido"></div>
+
 </div>
 
 <script>
@@ -659,14 +715,88 @@
     return;
   }
 
+  // Ocultar todos
   document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
-  document.getElementById(id)?.classList.remove('hidden');
+
+  // Mostrar solo el que corresponde
+  const panel = document.getElementById(id);
+  if (panel) {
+    panel.classList.remove('hidden');
+  }
+
+  // Ejecutar funciones específicas
   if (id === 'venta') {
-    listarProductosVenta(); // ✅ Cargar productos solo en vista de venta
+    listarProductosVenta();
+  } else if (id === 'dashboard') {
+    setTimeout(() => {
+      cargarDashboard();
+    }, 200);
   }
 }
 
+
 </script>
+
+<script>
+  let graficoVentasChart = null;
+</script>
+
+<script>
+
+  async function cargarDashboard() {
+    console.log("Ejecutando cargarDashboard()");
+    const contenido = document.getElementById("contenido");
+    const usuario = sessionStorage.getItem("usuario");
+
+    contenido.innerHTML = `
+      <h2>Resumen de Ventas</h2>
+      <div class="card">
+        <h3>Ventas del Dia</h3>
+        <p id="ventas-hoy">Calculando...</p>
+      </div>
+    `;
+
+    const total = await obtenerVentasDelDia(usuario);
+    document.getElementById("ventas-hoy").innerText = "S/ " + total.toFixed(2);
+  }
+
+async function obtenerVentasDelDia(usuario) {
+    try {
+      const supabaseUrl = "https://dlfkzcwhyopbghkqrzcy.supabase.co";
+      const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsZmt6Y3doeW9wYmdoa3FyemN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE1ODkzODgsImV4cCI6MjA2NzE2NTM4OH0.AjGB6MYYMYVmB7jIhZ7wd3IUb9QWh2ZI1GAywmtC58s";
+      const client = supabase.createClient(supabaseUrl, supabaseKey);
+
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+      const desde = hoy.toISOString();
+      const hasta = new Date(hoy.getTime() + 86400000).toISOString(); // +1 día
+
+      const { data, error } = await client
+        .from('registros_venta')
+        .select('total_venta')
+        .gte('fecha_venta', desde)
+        .lt('fecha_venta', hasta)
+        .eq('usuario_id', usuario);
+
+      if (error) {
+        console.error('Error al obtener ventas del día:', error);
+        return 0;
+      }
+
+      let total = 0;
+      data.forEach(v => {
+        total += parseFloat(v.total_venta || 0);
+      });
+
+      return total;
+    } catch (err) {
+      console.error('Error en obtenerVentasDelDia:', err);
+      return 0;
+    }
+  }
+
+</script>
+
 <script type="module">
 
   let productoSeleccionado = null;
@@ -986,7 +1116,7 @@ async function listarHistorialPedidos() {
 
   // Todas las funciones siguientes deben estar FUERA de la función login
   function aplicarPermisosDelUsuario(usuario) {
-  const secciones = ["venta", "inventario", "reportes", "clientes", "configuracion", "usuarios", "caja", "restaurante", "mesas"];// AÑADE "usuarios" AQUÍ   
+  const secciones = ["venta", "inventario", "clientes", "configuracion", "usuarios", "caja", "restaurante", "mesas","dashboard"];// AÑADE "usuarios" AQUÍ   
   secciones.forEach(seccion => {
     const boton = Array.from(document.querySelectorAll('.sidebar button'))
       // Ajusta esta búsqueda para que coincida con el texto real del botón
@@ -1597,6 +1727,8 @@ function agregarProductoCarrito(producto, modo) {
     });
   }
 
+  mostrarPanel("dashboard");
+
 });
 
 // aqui estaba el codigo -->
@@ -1725,6 +1857,36 @@ async function listarCajas() {
 
 document.addEventListener("DOMContentLoaded", listarCajas);
 
+//DASHBOARD 
+
+function actualizarResumen(tipo = 'dia') {
+  const resumen = {
+    dia: 10,
+    semana: 42,
+    mes: 150
+  };
+
+  const resumenHTML = `
+    <div class="resumen-box">
+      <h3>Resumen de Ventas (${tipo})</h3>
+      <p>Total de ventas: <strong>${resumen[tipo]}</strong></p>
+      <select id="selectorResumen" onchange="actualizarResumen(this.value)">
+        <option value="dia" ${tipo === 'dia' ? 'selected' : ''}>Día</option>
+        <option value="semana" ${tipo === 'semana' ? 'selected' : ''}>Semana</option>
+        <option value="mes" ${tipo === 'mes' ? 'selected' : ''}>Mes</option>
+      </select>
+    </div>
+  `;
+
+  const contenedor = document.getElementById('contenedorDashboard');
+  if (contenedor) {
+    contenedor.innerHTML = resumenHTML;
+  } else {
+    console.error("contenedorDashboard no encontrado");
+  }
+}
+
+    
    // Expone funciones globales para HTML
   window.login = login;
   window.crearUsuario = crearUsuario;
@@ -1743,6 +1905,7 @@ document.addEventListener("DOMContentLoaded", listarCajas);
   window.cobrarPedido = cobrarPedido;
   window.confirmarAgregarProducto = confirmarAgregarProducto;
   window.cerrarModal = cerrarModal;
+  window.cargarDashboard = cargarDashboard;
 
 </script>
 
