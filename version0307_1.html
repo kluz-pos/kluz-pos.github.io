@@ -220,46 +220,6 @@
   margin-bottom: 16px;
 }
 
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.5rem;
-  margin-top: 1rem;
-}
-
-.card {
-  background-color: white;
-  padding: 1rem;
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-.card h3 {
-  margin-bottom: 0.5rem;
-}
-
-.panel {
-  display: none;
-}
-.panel:not(.hidden) {
-  display: block;
-}
-
-.card-dashboard {
-    background: #fff;
-    padding: 20px;
-    border-radius: 12px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.08);
-    width: 250px;
-}
-
-.resumen-box {
-  border: 1px solid #ccc;
-  padding: 1rem;
-  margin-top: 1rem;
-  background-color: #fff;
-  border-radius: 8px;
-}
-
  </style>
 </head>
 <body>
@@ -277,12 +237,13 @@
      style="height: 60px; object-fit: contain; margin-bottom: 20px;">
     <button onclick="mostrarPanel('venta')">🛒 Punto de Venta</button>
     <button onclick="mostrarPanel('inventario')">📦 Inventario</button>
-    <button onclick="mostrarPanel('dashboard')">📈 Dashboard</button>
+    <button class="opcion-menu" data-opcion="reportes">📊 Reportes</button>
     <button onclick="mostrarPanel('clientes')">👥 Clientes</button>
     <button onclick="mostrarPanel('configuracion')">⚙️ Configuración</button>
     <button onclick="mostrarPanel('caja')">💰 Gestión de Caja</button>
     <button onclick="mostrarPanel('restaurante')">🍽️ Restaurante Atención</button>
     <button onclick="mostrarPanel('mesas')">🪑 Atención Mesas</button>
+    <button onclick="mostrarPanel('control-inventario')" class="fas fa-boxes">📦Control Inventario</button>
     <button onclick="mostrarPanel('usuarios')">👤 Gestión de Usuarios</button>
     <hr style="width: 80%; border: 0.5px solid #fff; margin: 20px 0;">
     <button onclick="cerrarSesion()">🔓 Cerrar sesión</button>
@@ -313,6 +274,26 @@
         </div>
       </div>
     </div>
+
+
+<div id="reportes" class="panel hidden">
+  <h2>REPORTE VENTAS</h2>
+  <div style="
+  background-color: #d4edda;
+  padding: 40px;
+  border-radius: 12px;
+  text-align: center;
+  max-width: 600px;
+  margin: 0 auto;
+  margin-top: 20px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+">
+  <h2 style="color: #080908; font-size: 26px; margin-bottom: 15px;">VENTAS DEL DÍA</h2>
+  <div id="totalVentasHoy" style="font-size: 32px; font-weight: bold; color: #155724;">
+    Cargando total de ventas...
+  </div>
+</div>
+</div>
 
 <div id="inventario" class="panel hidden">
   <h2>Inventario</h2>
@@ -388,7 +369,7 @@
             height: 80px;
             resize: none; /* Puedes poner none para bloquear el cambio manual */
         }
-        
+
       </style>
 
       <div class="form-grid">
@@ -476,38 +457,78 @@
     </table>
   </div>
 </div>
+   
+</div>
 
-
-    <div id="reportes" class="panel hidden">
-      <h2>Reportes</h2>
-      <canvas id="graficoVentas" width="400" height="200"></canvas>
-      <canvas id="graficoProductos" width="400" height="200"></canvas>
-    </div>
-
-    <div id="clientes" class="panel hidden">
+ <div id="clientes" class="panel hidden">
       <h2>Clientes</h2>
       <p>Gestion por implementar.</p>
     </div>
 
-<div id="dashboard" class="panel hidden">
-  <h2>📊 Resumen del Día</h2>
-  <p><strong>Ventas del día:</strong> <span id="ventas-dia">Cargando...</span></p>
-
-  <h3>🔥 Productos más vendidos</h3>
-  <ul id="productos-populares"></ul>
-
-  <h3>⚠️ Productos con bajo stock</h3>
-  <ul id="stock-bajo"></ul>
-
-  <h3>📈 Ingresos por mes</h3>
-  <canvas id="grafico-ventas" style="width: 100%; height: 400px;"></canvas>
-</div>
-
-  <div id="configuracion" class="panel hidden">
-      <h2>Configuración</h2>
+ <div id="configuracion" class="panel hidden">
+      <h2>Configuraci贸n</h2>
       <p>Opciones de sistema por implementar.</p>
+ </div>
+
+ <div id="control-inventario" class="panel hidden">
+  <h2>Control de Inventario de Equipos</h2>
+
+  <div class="inventario-contenedor">
+    <div class="venta-section">
+      <h3>Información del Equipo</h3>
+
+      <form id="form-inventario-equipo" style="max-width: 100%;">
+        <style>
+          .form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+          }
+        </style>
+
+        <div class="form-grid">
+          <input type="hidden" id="equipo-id">
+          <input type="text" placeholder="Nombre" id="nombreEquipo" required>
+          <input type="number" placeholder="Cantidad" id="cantidadEquipo" required>
+          <input type="text" placeholder="Ancho" id="anchoEquipo">
+          <input type="text" placeholder="Alto" id="altoEquipo">
+          <input type="text" placeholder="Profundidad" id="profundidadEquipo">
+          <input type="text" placeholder="Ubicación" id="ubicacionEquipo">
+        </div>
+
+        <textarea id="descripcionEquipo" placeholder="Descripción del equipo..."></textarea>
+
+        <br>
+        <button type="submit" class="btn-agregar">Registrar Equipo</button>
+      </form>
     </div>
   </div>
+
+  <div class="venta-section">
+    <h3>Equipos Registrados</h3>
+    <input type="text" id="buscarEquipo" placeholder="Buscar equipo..." style="float:right; margin-bottom:10px;" onkeyup="filtrarEquipos()">
+    <table>
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Cantidad</th>
+          <th>Ancho</th>
+          <th>Alto</th>
+          <th>Profundidad</th>
+          <th>Ubicación</th>
+          <th>Descripción</th>
+          <th>Acción</th>
+        </tr>
+      </thead>
+      <tbody id="tablaEquipos">
+        <!-- Se cargan aquí los datos desde Supabase -->
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
   <div id="usuarios" class="panel hidden">
   <h2>Gestión de Usuarios</h2>
 
@@ -588,7 +609,7 @@
         <div class="permiso-checkboxes">
           <label><input type="checkbox" class="permiso" value="venta"> Punto de Venta</label>
           <label><input type="checkbox" class="permiso" value="inventario"> Inventario</label>
-          <label><input type="checkbox" class="permiso" value="dashboard"> Dashboard</label>
+          <label><input type="checkbox" class="permiso" value="reportes"> Reportes</label>
           <label><input type="checkbox" class="permiso" value="clientes"> Clientes</label>
           <label><input type="checkbox" class="permiso" value="configuracion"> Configuración</label>
           <label><input type="checkbox" class="permiso" value="caja"> Gestión de Caja</label>
@@ -701,101 +722,52 @@
 
 </div>
 
-<div id="contenido"></div>
-
 </div>
 
 <script>
   
-  function mostrarPanel(id) {
-  const permisosUsuario = JSON.parse(localStorage.getItem("permisosUsuario") || "[]");
+ function mostrarPanel(id) {
+    const permisosUsuario = JSON.parse(localStorage.getItem("permisosUsuario") || "[]");
 
-  if (!permisosUsuario.includes(id) && id !== "usuarios") {
-    alert("No tienes permiso para acceder a esta sección.");
-    return;
-  }
+    if (!permisosUsuario.includes(id) && id !== "usuarios") {
+      alert("No tienes permiso para acceder a esta sección.");
+      return;
+    }
 
-  // Ocultar todos
-  document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
+    const panel = document.getElementById(id);
+    if (panel) {
+      panel.classList.remove('hidden');
+    }
 
-  // Mostrar solo el que corresponde
-  const panel = document.getElementById(id);
-  if (panel) {
-    panel.classList.remove('hidden');
-  }
+    if (id === 'venta') {
+      listarProductosVenta();
+    }
 
-  // Ejecutar funciones específicas
-  if (id === 'venta') {
-    listarProductosVenta();
-  } else if (id === 'dashboard') {
-    setTimeout(() => {
-      cargarDashboard();
-    }, 200);
-  }
-}
-
-
-</script>
-
-<script>
-  let graficoVentasChart = null;
-</script>
-
-<script>
-
-  async function cargarDashboard() {
-    console.log("Ejecutando cargarDashboard()");
-    const contenido = document.getElementById("contenido");
-    const usuario = sessionStorage.getItem("usuario");
-
-    contenido.innerHTML = `
-      <h2>Resumen de Ventas</h2>
-      <div class="card">
-        <h3>Ventas del Dia</h3>
-        <p id="ventas-hoy">Calculando...</p>
-      </div>
-    `;
-
-    const total = await obtenerVentasDelDia(usuario);
-    document.getElementById("ventas-hoy").innerText = "S/ " + total.toFixed(2);
-  }
-
-async function obtenerVentasDelDia(usuario) {
-    try {
-      const supabaseUrl = "https://dlfkzcwhyopbghkqrzcy.supabase.co";
-      const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsZmt6Y3doeW9wYmdoa3FyemN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE1ODkzODgsImV4cCI6MjA2NzE2NTM4OH0.AjGB6MYYMYVmB7jIhZ7wd3IUb9QWh2ZI1GAywmtC58s";
-      const client = supabase.createClient(supabaseUrl, supabaseKey);
-
-      const hoy = new Date();
-      hoy.setHours(0, 0, 0, 0);
-      const desde = hoy.toISOString();
-      const hasta = new Date(hoy.getTime() + 86400000).toISOString(); // +1 día
-
-      const { data, error } = await client
-        .from('registros_venta')
-        .select('total_venta')
-        .gte('fecha_venta', desde)
-        .lt('fecha_venta', hasta)
-        .eq('usuario_id', usuario);
-
-      if (error) {
-        console.error('Error al obtener ventas del día:', error);
-        return 0;
-      }
-
-      let total = 0;
-      data.forEach(v => {
-        total += parseFloat(v.total_venta || 0);
-      });
-
-      return total;
-    } catch (err) {
-      console.error('Error en obtenerVentasDelDia:', err);
-      return 0;
+    if (id === 'reportes') {
+        requestAnimationFrame(() => {
+        mostrarTotalVentasDelDia();
+        });
     }
   }
 
 </script>
+
+<script>
+  const opciones = document.querySelectorAll(".opcion-menu");
+  opciones.forEach((opcion) => {
+    opcion.addEventListener("click", async function () {
+      const opcionSeleccionada = opcion.dataset.opcion;
+      mostrarPanel(opcionSeleccionada);
+
+      if (opcionSeleccionada === "reportes") {
+        await mostrarTotalVentasDelDia();
+      }
+    });
+  });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script type="module">
 
@@ -828,6 +800,88 @@ async function obtenerVentasDelDia(usuario) {
   alert("Plato registrado");
   listarPlatosRestaurante();
 });
+
+// nuevo inventario
+document.getElementById('form-inventario-equipo').addEventListener('submit', async function (e) {
+  e.preventDefault();
+
+  const permisosUsuario = JSON.parse(localStorage.getItem("permisosUsuario") || "[]");
+  if (!permisosUsuario.includes("control-inventario")) {
+    alert("No tienes permiso para registrar equipos.");
+    return;
+  }
+
+  const nuevoEquipo = {
+    nombre: document.getElementById('nombreEquipo').value,
+    cantidad: parseInt(document.getElementById('cantidadEquipo').value),
+    descripcion: document.getElementById('descripcionEquipo').value,
+    ancho: parseFloat(document.getElementById('anchoEquipo').value),
+    alto: parseFloat(document.getElementById('altoEquipo').value),
+    profundidad: parseFloat(document.getElementById('profundidadEquipo').value),
+    ubicacion: document.getElementById('ubicacionEquipo').value,
+  };
+
+  const idEditando = this.dataset.editandoId;
+  let error;
+
+  if (idEditando) {
+    ({ error } = await supabase
+      .from('inventario_equipos')
+      .update(nuevoEquipo)
+      .eq('id', idEditando));
+    delete this.dataset.editandoId;
+  } else {
+    ({ error } = await supabase
+      .from('inventario_equipos')
+      .insert([nuevoEquipo]));
+  }
+
+  if (error) {
+    alert("Error al guardar equipo: " + error.message);
+    return;
+  }
+
+  this.reset();
+  cargarEquipos();
+});
+
+async function cargarEquipos() {
+  const { data, error } = await supabase.from('inventario_equipos').select('*');
+
+  if (error) {
+    console.error('Error al cargar equipos:', error.message);
+    return;
+  }
+
+  const tbody = document.getElementById('tablaEquipos');
+  tbody.innerHTML = '';
+
+  data.forEach((equipo) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td>${equipo.nombre}</td>
+        <td>${equipo.cantidad}</td>
+        <td>${equipo.ancho}</td>
+        <td>${equipo.alto}</td>
+        <td>${equipo.profundidad}</td>
+        <td>${equipo.ubicacion}</td>
+        <td>${equipo.descripcion}</td>
+      <td>
+        <button class="btn-editar" onclick="editarEquipo(event, ${equipo.id})">✏️</button>
+        <button onclick="eliminarEquipo(${equipo.id})">🗑️</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+ // Haz visible cargarEquipos globalmente:
+window.cargarEquipos = cargarEquipos;
+
+// Cargar equipos al iniciar
+cargarEquipos();
+
+//FIN DE CARGAR EQUIPOS - NUEVO INVENTARIO
 
 async function listarPlatosRestaurante() {
   const { data, error } = await supabase.from("platos_restaurante").select("*").order('id', { ascending: false });
@@ -1116,7 +1170,7 @@ async function listarHistorialPedidos() {
 
   // Todas las funciones siguientes deben estar FUERA de la función login
   function aplicarPermisosDelUsuario(usuario) {
-  const secciones = ["venta", "inventario", "clientes", "configuracion", "usuarios", "caja", "restaurante", "mesas","dashboard"];// AÑADE "usuarios" AQUÍ   
+  const secciones = ["venta", "inventario", "reportes", "clientes", "configuracion", "usuarios", "caja", "restaurante", "mesas", "control-inventario"];// AÑADE "usuarios" AQUÍ   
   secciones.forEach(seccion => {
     const boton = Array.from(document.querySelectorAll('.sidebar button'))
       // Ajusta esta búsqueda para que coincida con el texto real del botón
@@ -1481,59 +1535,126 @@ async function listarProductos(filtro = "") {
 
   // Variable global para almacenar el producto seleccionado al abrir el modal
 
-  // Modifica agregarAlCarrito para mostrar el modal
-  function agregarAlCarrito(producto) {
-  console.log(`Intentando agregar producto al carrito: ${producto.nombre}`);
+ // ✅ Mostrar modal y configurar opciones de venta
+function agregarAlCarrito(producto) {
+  console.log(`🔄 Intentando agregar producto al carrito: ${producto.nombre}`);
 
-  if (producto.por_kilo) {
-    // Guardamos el producto seleccionado globalmente para usarlo después
-    productoSeleccionado = producto;
-    document.getElementById("modal-titulo").textContent = `Agregar ${producto.nombre}`;
-    document.getElementById("modo-venta").value = "unidad";
-    document.getElementById("modal-venta").style.display = "flex";
-  } else {
-    agregarProductoCarrito(producto, "unidad");
+  productoSeleccionado = producto;
+  document.getElementById("modal-titulo").textContent = `Agregar ${producto.nombre}`;
+
+  const modoSelect = document.getElementById("modo-venta");
+  if (!modoSelect) {
+    alert("No se encontró el selector de modo de venta.");
+    return;
   }
+
+  // Limpiar opciones previas
+  modoSelect.innerHTML = "";
+
+  // Siempre permitir por unidad
+  modoSelect.appendChild(new Option("Por unidad", "unidad"));
+
+  // Permitir por kilo si aplica
+  if (producto.por_kilo) {
+    modoSelect.appendChild(new Option("Por kilo", "kilo"));
+
+    // 🚨 Aquí forzamos a que también aparezca la opción por gramo
+    modoSelect.appendChild(new Option("Por gramo", "gramo"));
+  }
+
+  // Valor por defecto
+  modoSelect.value = "unidad";
+
+  // Mostrar modal
+  document.getElementById("modal-venta").style.display = "flex";
 }
 
 
-
+// ✅ Confirmar selección de modo y agregar producto al carrito
 function confirmarAgregarProducto() {
-  const modo = document.getElementById("modo-venta").value;
+  const modoVenta = document.getElementById('modo-venta').value;
+  const productoNombre = document.getElementById('modal-titulo').textContent.replace('Agregar ', '');
+
+  console.log(`🟡 Modo seleccionado: ${modoVenta}`);
+  console.log(`🟡 Producto a agregar: ${productoNombre}`);
+
+  if (!modoVenta) {
+    alert("⚠️ No se seleccionó ningún modo de venta");
+    return;
+  }
+
+  if (modoVenta === 'unidad') {
+    agregarProductoCarrito(productoSeleccionado, 'unidad');
+  } else if (modoVenta === 'kilo') {
+    agregarProductoCarrito(productoSeleccionado, 'kilo');
+  } else if (modoVenta === 'gramo') {
+    agregarProductoCarrito(productoSeleccionado, 'gramo');
+  } else {
+    alert('⚠️ Modo de venta no válido.');
+    console.warn('Valor inesperado en modoVenta:', modoVenta);
+  }
+
   cerrarModal();
-  agregarProductoCarrito(productoSeleccionado, modo);
 }
 
 function cerrarModal() {
   document.getElementById("modal-venta").style.display = "none";
 }
 
-function agregarProductoCarrito(producto, modo) {
-  const yaEnCarrito = carrito.find(p => p.id === producto.id && p.modoVenta === modo);
+function agregarProductoCarrito(producto, modoVenta) {
+  let cantidad = 1;
+  let precioFinal = producto.precio;
 
-  const precioCorrecto = modo === "kilo" ? producto.precio_kilo : producto.precio;
-
-  if (yaEnCarrito) {
-    // Incrementar si hay stock suficiente
-    if (yaEnCarrito.cantidadEnCarrito < producto.cantidad) {
-      yaEnCarrito.cantidadEnCarrito++;
-    } else {
-      alert(`No hay suficiente stock para agregar más de ${producto.nombre}.`);
+  if (modoVenta === "gramo") {
+    const gramos = parseFloat(prompt("¿Cuántos gramos deseas agregar?"));
+    if (isNaN(gramos) || gramos <= 0) {
+      alert("Cantidad inválida.");
+      return;
     }
-  } else {
-    const nuevoItem = {
-      ...producto,
-      cantidadEnCarrito: 1,
-      modoVenta: modo,
-      precio: precioCorrecto  // ✅ importante
-    };
 
-    carrito.push(nuevoItem);
+    const kilosNecesarios = gramos / 1000;
+
+    if (producto.total_kilos < kilosNecesarios) {
+      alert(`No hay suficiente stock para ${gramos}g de ${producto.nombre}. Solo hay ${producto.total_kilos.toFixed(2)} Kg`);
+      return;
+    }
+
+    cantidad = gramos;
+
+    // ✅ Calcular el precio proporcional por gramos (usa precio_kilo, no precio unitario)
+    precioFinal = (producto.precio_kilo / 1000) * gramos;
   }
 
+  if (modoVenta === "kilo") {
+    cantidad = 1;
+    precioFinal = producto.precio_kilo;
+  }
+
+  // Para unidad usamos el precio normal
+  if (modoVenta === "unidad") {
+    cantidad = 1;
+    precioFinal = producto.precio;
+  }
+
+  const item = {
+    id: producto.id,
+    nombre: producto.nombre,
+    precio: precioFinal,
+    modoVenta: modoVenta,
+    cantidadEnCarrito: cantidad,
+    cantidad: producto.total_kilos ?? producto.cantidad  // stock disponible
+  };
+
+  console.log("💡 Producto agregado al carrito:", {
+  nombre: producto.nombre,
+  modoVenta,
+  cantidad,
+  precioFinal
+  });
+
+  carrito.push(item);
   actualizarCarrito();
 }
-
 
   function actualizarCarrito() {
     const lista = document.getElementById('carrito-lista'); // ✅ Asegúrate que este ID exista en tu HTML
@@ -1558,17 +1679,26 @@ function agregarProductoCarrito(producto, modo) {
     let suma = 0;
 
     carrito.forEach((p, index) => {
+    
+        if (typeof p.precio !== 'number' || typeof p.cantidadEnCarrito !== 'number') {
+            console.warn("⚠️ Producto inválido en carrito:", p);
+            return;
+        }
+
+        suma += p.precio; // Usar cantidadEnCarrito para el total
+
         const li = document.createElement("li");
         li.style.display = 'flex';
         li.style.justifyContent = 'space-between';
         li.style.alignItems = 'center';
         li.style.marginBottom = '10px';
 
-        suma += p.precio * p.cantidadEnCarrito; // Usar cantidadEnCarrito para el total
+        // Mostrar modo de venta correctamente
+        let tipo = "unidad";
+        if (p.modoVenta === "kilo") tipo = "kg";
+        else if (p.modoVenta === "gramo") tipo = "gramos";
 
-        // Crear el texto del producto
         const textoProducto = document.createElement('span');
-        const tipo = p.modoVenta === "kilo" ? "kg" : "unidad";
         textoProducto.textContent = `${p.nombre} (S/ ${p.precio.toFixed(2)} por ${tipo})`;
         li.appendChild(textoProducto);
 
@@ -1727,8 +1857,6 @@ function agregarProductoCarrito(producto, modo) {
     });
   }
 
-  mostrarPanel("dashboard");
-
 });
 
 // aqui estaba el codigo -->
@@ -1857,36 +1985,6 @@ async function listarCajas() {
 
 document.addEventListener("DOMContentLoaded", listarCajas);
 
-//DASHBOARD 
-
-function actualizarResumen(tipo = 'dia') {
-  const resumen = {
-    dia: 10,
-    semana: 42,
-    mes: 150
-  };
-
-  const resumenHTML = `
-    <div class="resumen-box">
-      <h3>Resumen de Ventas (${tipo})</h3>
-      <p>Total de ventas: <strong>${resumen[tipo]}</strong></p>
-      <select id="selectorResumen" onchange="actualizarResumen(this.value)">
-        <option value="dia" ${tipo === 'dia' ? 'selected' : ''}>Día</option>
-        <option value="semana" ${tipo === 'semana' ? 'selected' : ''}>Semana</option>
-        <option value="mes" ${tipo === 'mes' ? 'selected' : ''}>Mes</option>
-      </select>
-    </div>
-  `;
-
-  const contenedor = document.getElementById('contenedorDashboard');
-  if (contenedor) {
-    contenedor.innerHTML = resumenHTML;
-  } else {
-    console.error("contenedorDashboard no encontrado");
-  }
-}
-
-    
    // Expone funciones globales para HTML
   window.login = login;
   window.crearUsuario = crearUsuario;
@@ -1905,24 +2003,171 @@ function actualizarResumen(tipo = 'dia') {
   window.cobrarPedido = cobrarPedido;
   window.confirmarAgregarProducto = confirmarAgregarProducto;
   window.cerrarModal = cerrarModal;
-  window.cargarDashboard = cargarDashboard;
 
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  // Solo si aún no existe, define Supabase como variable global
+  window.supabaseUrl = 'https://dlfkzcwhyopbghkqrzcy.supabase.co';
+  window.supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRsZmt6Y3doeW9wYmdoa3FyemN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE1ODkzODgsImV4cCI6MjA2NzE2NTM4OH0.AjGB6MYYMYVmB7jIhZ7wd3IUb9QWh2ZI1GAywmtC58s'; // usa la key completa de tu código
+  window.supabase = supabase.createClient(window.supabaseUrl, window.supabaseKey);
+
+</script>
+
+<script>
+
+async function mostrarTotalVentasDelDia() {
+  console.log("Ejecutando mostrarTotalVentasDelDia...");
+
+  const usuarioActivo = localStorage.getItem("usuarioActivo");
+  if (!usuarioActivo) {
+    console.error("Usuario no encontrado en localStorage");
+    return;
+  }
+
+  const fechaActual = new Date();
+  const fechaActualISO = fechaActual.toISOString().split("T")[0];
+
+  const { data, error } = await supabase
+    .from("registros_venta")
+    .select("total_venta")
+    .eq("usuario_id", usuarioActivo)
+    .gte("fecha_venta", `${fechaActualISO}T00:00:00`)
+    .lte("fecha_venta", `${fechaActualISO}T23:59:59`);
+
+  if (error) {
+    console.error("Error al obtener ventas:", error.message);
+    document.getElementById("totalVentasHoy").innerText = "Error al obtener ventas.";
+    return;
+  }
+
+  const total = data.reduce((sum, venta) => sum + Number(venta.total_venta), 0);
+  document.getElementById("totalVentasHoy").innerText = `S/. ${total.toFixed(2)}`;
+}
+
+</script>
+
+<script>
+  
+async function eliminarEquipo(id) {
+    if (!confirm("¿Estás seguro de eliminar este equipo?")) return;
+
+    const { error } = await supabase
+      .from("inventario_equipos")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      alert("Error al eliminar el equipo: " + error.message);
+    } else {
+      alert("Equipo eliminado correctamente.");
+      cargarEquipos(); // Recargar lista actualizada
+    }
+  }
+
+  // ✅ Función para editar un equipo
+  async function editarEquipo(event, id) {
+  event.preventDefault();
+
+  const { data, error } = await supabase
+    .from("inventario_equipos")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error) {
+    alert("Error al obtener datos del equipo: " + error.message);
+    return;
+  }
+
+  // Verifica que los inputs existan
+  const campos = {
+    id: document.getElementById("equipo-id"),
+    nombre: document.getElementById("nombreEquipo"),
+    cantidad: document.getElementById("cantidadEquipo"),
+    ancho: document.getElementById("anchoEquipo"),
+    alto: document.getElementById("altoEquipo"),
+    profundidad: document.getElementById("profundidadEquipo"),
+    ubicacion: document.getElementById("ubicacionEquipo"),
+    descripcion: document.getElementById("descripcionEquipo")
+  };
+
+  for (let campo in campos) {
+    if (!campos[campo]) {
+      alert(`Campo "${campo}" no encontrado en el DOM`);
+      return;
+    }
+  }
+
+  // Rellena los inputs
+  campos.id.value = data.id;
+  campos.nombre.value = data.nombre;
+  campos.cantidad.value = data.cantidad;
+  campos.ancho.value = data.ancho;
+  campos.alto.value = data.alto;
+  campos.profundidad.value = data.profundidad;
+  campos.ubicacion.value = data.ubicacion;
+  campos.descripcion.value = data.descripcion;
+
+  // Cambia el texto del botón
+  const boton = document.getElementById("btn-registrar-equipo");
+  if (boton) {
+    boton.textContent = "Actualizar Equipo";
+    boton.onclick = async () => {
+      const { error: updateError } = await supabase
+        .from("inventario_equipos")
+        .update({
+          nombre: campos.nombre.value,
+          cantidad: campos.cantidad.value,
+          ancho: campos.ancho.value,
+          alto: campos.alto.value,
+          profundidad: campos.profundidad.value,
+          ubicacion: campos.ubicacion.value,
+          descripcion: campos.descripcion.value
+        })
+        .eq("id", campos.id.value);
+
+      if (updateError) {
+        alert("Error al actualizar equipo: " + updateError.message);
+      } else {
+        alert("Equipo actualizado correctamente.");
+        cargarEquipos(); // Recarga la tabla
+        // Resetea formulario
+        document.getElementById("form-inventario-equipo").reset();
+        boton.textContent = "Registrar Equipo";
+        boton.onclick = registrarEquipo;
+      }
+    };
+  }
+}
+
+function filtrarEquipos() {
+  const filtro = document.getElementById('buscarEquipo').value.toLowerCase();
+  const filas = document.querySelectorAll('#tablaEquipos tr');
+
+  filas.forEach(fila => {
+    const texto = fila.textContent.toLowerCase();
+    fila.style.display = texto.includes(filtro) ? '' : 'none';
+  });
+}
+</script>
+
 <!-- Modal para elegir tipo de venta -->
-<div id="modal-venta" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%;
-  background-color:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:1000;">
+<div id="modal-venta" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background-color: rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:1000;">
   <div style="background:white; padding:30px; border-radius:10px; text-align:center; min-width:300px;">
     <h3 id="modal-titulo"></h3>
     <label for="modo-venta">¿Cómo deseas vender este producto?</label><br><br>
     <select id="modo-venta" style="padding:10px;">
       <option value="unidad">Por unidad</option>
       <option value="kilo">Por kilo</option>
+      <option value="gramo">Por gramos</option>
     </select><br><br>
     <button onclick="confirmarAgregarProducto()">Confirmar</button>
     <button onclick="cerrarModal()" style="margin-left:10px;">Cancelar</button>
   </div>
 </div>
+
 
 </body>
 </html>
