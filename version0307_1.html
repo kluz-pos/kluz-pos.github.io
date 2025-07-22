@@ -782,6 +782,7 @@
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
   let carrito = []; // Se mueve la declaración de carrito a un ámbito más amplio
+  let inventario = []; // 🔄 Global para almacenar productos de Supabase
 
   //Atencion de resturante
   document.getElementById('form-plato').addEventListener('submit', async function (e) {
@@ -1186,7 +1187,7 @@ async function listarHistorialPedidos() {
 
 let cajaActualId = null; // almacena la caja abierta actual
 
-  async function cobrar() {
+async function cobrar() {
   if (carrito.length === 0) {
     alert("🛒 El carrito está vacío.");
     return;
@@ -1203,40 +1204,52 @@ let cajaActualId = null; // almacena la caja abierta actual
 
   for (const item of carrito) {
     const cantidadVendida = item.cantidadEnCarrito;
-    const subtotal = item.precio * cantidadVendida;
+    const subtotal = item.precio;
     totalVenta += subtotal;
 
     detalleVenta.push({
       producto_id: item.id,
       nombre: item.nombre,
       cantidad: cantidadVendida,
-      precio_unitario: item.precio,
+      precio_unitario: item.precioUnitario,
       modo: item.modoVenta,
       subtotal: subtotal
     });
 
-    // 🔁 Descuento de inventario según tipo de venta
-    let nuevoStock = item.cantidad;
-    let nuevoTotalKilos = item.total_kilos ?? 0;
-
-if (item.por_kilo && item.modoVenta === "kilo") {
-  const kilosVendidos = cantidadVendida;
-
-  // Descuenta kilos
-  nuevoTotalKilos -= kilosVendidos;
-  if (nuevoTotalKilos < 0) nuevoTotalKilos = 0;
-
-  // 🔁 Recalcula cuántas unidades completas quedan según el total_kilos restante
-  const unidadesRecalculadas = Math.floor(nuevoTotalKilos / item.kilos_por_unidad);
-
-  // 🔄 Se actualiza el nuevo stock con ese cálculo
-  nuevoStock = unidadesRecalculadas;
-} else {
-      nuevoStock -= cantidadVendida;
-      if (nuevoStock < 0) nuevoStock = 0;
+    const productoOriginal = inventario.find(p => p.id === item.id);
+    if (!productoOriginal) {
+      console.warn("❌ Producto no encontrado en inventario:", item.nombre);
+      continue;
     }
 
-    // Actualizar stock en Supabase
+    let nuevoStock = productoOriginal.cantidad;            // cantidad: INT4
+    let nuevoTotalKilos = productoOriginal.total_kilos;    // total_kilos: numeric
+    const kilosPorUnidad = productoOriginal.kilos_por_unidad || 1; // numeric
+    const porKilo = productoOriginal.por_kilo === true;
+
+    if (item.modoVenta === "kilo") {
+      const kilosVendidos = cantidadVendida;
+      nuevoTotalKilos -= kilosVendidos;
+      if (nuevoTotalKilos < 0) nuevoTotalKilos = 0;
+
+      // Recalcular unidades restantes
+      nuevoStock = Math.floor(nuevoTotalKilos / kilosPorUnidad);
+
+    } else if (item.modoVenta === "gramo") {
+      const kilosVendidos = cantidadVendida / 1000;
+      nuevoTotalKilos -= kilosVendidos;
+      if (nuevoTotalKilos < 0) nuevoTotalKilos = 0;
+
+      // Recalcular unidades restantes
+      nuevoStock = Math.floor(nuevoTotalKilos / kilosPorUnidad);
+
+    } else if (item.modoVenta === "unidad") {
+      nuevoStock -= cantidadVendida;
+      if (nuevoStock < 0) nuevoStock = 0;
+      // No modificar total_kilos al vender por unidad
+    }
+
+    // 🔁 Actualizar en Supabase
     const { error: errorStock } = await supabase
       .from("productos")
       .update({
@@ -1250,17 +1263,14 @@ if (item.por_kilo && item.modoVenta === "kilo") {
     }
   }
 
-  // Guardar la venta en la tabla registros_venta
-  const { error: errorVenta } = await supabase.from("registros_venta").insert([
-  {
+  // 💾 Guardar venta
+  const { error: errorVenta } = await supabase.from("registros_venta").insert([{
     fecha_venta: new Date().toISOString(),
     total_venta: totalVenta,
     detalle_productos: detalleVenta,
     usuario_id: usuarioActivo,
-    caja_id: cajaActualId // ✅ importante
-
-  }
-  ]);
+    caja_id: cajaActualId
+  }]);
 
   if (errorVenta) {
     alert("❌ Error al guardar la venta.");
@@ -1271,7 +1281,7 @@ if (item.por_kilo && item.modoVenta === "kilo") {
   alert("✅ Venta registrada con éxito.");
   carrito = [];
   actualizarCarrito();
-  listarProductos(); // Para actualizar la vista del inventario
+  listarProductos();
 }
 
 async function listarUsuarios() {
@@ -1439,40 +1449,66 @@ async function guardarProducto() {
   listarProductos();
 }
 
+// Asegúrate de tener esta línea al inicio de tu archivo JS
+
 async function listarProductos(filtro = "") {
   const usuarioActivo = localStorage.getItem("usuarioActivo");
-  if (!usuarioActivo) return;
+  if (!usuarioActivo) {
+    alert("⚠️ Usuario no identificado.");
+    return;
+  }
 
+  // Traer productos de Supabase filtrados por usuario
   let { data, error } = await supabase
     .from('productos')
     .select('*')
     .eq('usuario_productos', usuarioActivo);
 
-  if (error) return alert("Error al cargar productos");
+  if (error) {
+    console.error("❌ Error al cargar productos:", error.message);
+    alert("Error al cargar productos");
+    return;
+  }
 
+  if (!Array.isArray(data)) {
+    console.error("❌ Los datos recibidos no son un array:", data);
+    alert("Error inesperado al procesar los productos.");
+    return;
+  }
+
+  // Guardar productos en variable global
+  inventario = data;
+
+  // Aplicar filtro si se ingresó texto
   if (filtro) {
     const f = filtro.toLowerCase();
     data = data.filter(p =>
-      p.nombre.toLowerCase().includes(f) ||
-      (p.categoria && p.categoria.toLowerCase().includes(f)) ||
-      (p.codigo && p.codigo.toLowerCase().includes(f))
+      p.nombre?.toLowerCase().includes(f) ||
+      p.categoria?.toLowerCase().includes(f) ||
+      p.codigo?.toLowerCase().includes(f)
     );
   }
 
   const tbody = document.getElementById('lista-productos');
-  tbody.innerHTML = '';
+  if (!tbody) {
+    console.warn("⚠️ No se encontró el elemento con ID 'lista-productos'");
+    return;
+  }
+
+  tbody.innerHTML = ''; // Limpiar tabla
 
   data.forEach(p => {
     const tr = document.createElement('tr');
     const totalKilosTexto = p.por_kilo ? (p.total_kilos?.toFixed(2) + " kg") : "-";
+
     tr.innerHTML = `
       <td data-label="Nombre">${p.nombre}</td>
-      <td data-label="Precio">S/ ${p.precio.toFixed(2)}</td>
-      <td data-label="Cantidad">${p.cantidad}</td>
+      <td data-label="Precio">S/ ${p.precio?.toFixed(2) ?? "0.00"}</td>
+      <td data-label="Cantidad">${p.cantidad ?? 0}</td>
       <td data-label="Total_Kg">${totalKilosTexto}</td>
-      <td data-label="Código">${p.codigo}</td>
-      <td data-label="Categoría">${p.categoria}</td>
-      <td data-label="Sucursal">${p.sucursal}</td>
+      <td data-label="Código">${p.codigo ?? "-"}</td>
+      <td data-label="Categoría">${p.categoria ?? "-"}</td>
+      <td data-label="Sucursal">${p.sucursal ?? "-"}</td>
       <td data-label="Acciones">
         <button onclick="eliminarProducto(${p.id})"
           style="background-color:red;color:white;padding:6px;border:none;border-radius:4px;cursor:pointer;">
@@ -1484,7 +1520,7 @@ async function listarProductos(filtro = "") {
   });
 }
 
-  async function eliminarProducto(id) {
+async function eliminarProducto(id) {
     if (!confirm("¿Deseas eliminar este producto?")) return;
     const { error } = await supabase.from('productos').delete().eq('id', id);
     if (!error) {
@@ -1604,6 +1640,18 @@ function cerrarModal() {
 function agregarProductoCarrito(producto, modoVenta) {
   let cantidad = 1;
   let precioFinal = producto.precio;
+  let precioUnitario = producto.precio;
+
+  // 🔒 Validación general de stock agotado
+  if (modoVenta === "unidad" && producto.cantidad === 0) {
+    alert(`❌ El producto ${producto.nombre} está agotado (0 unidades).`);
+    return;
+  }
+
+  if ((modoVenta === "kilo" || modoVenta === "gramo") && producto.total_kilos <= 0) {
+    alert(`❌ El producto ${producto.nombre} no tiene stock en kilos.`);
+    return;
+  }
 
   if (modoVenta === "gramo") {
     const gramos = parseFloat(prompt("¿Cuántos gramos deseas agregar?"));
@@ -1620,72 +1668,76 @@ function agregarProductoCarrito(producto, modoVenta) {
     }
 
     cantidad = gramos;
+    precioUnitario = producto.precio_kilo / 1000;
+    precioFinal = precioUnitario * gramos;
 
-    // ✅ Calcular el precio proporcional por gramos (usa precio_kilo, no precio unitario)
-    precioFinal = (producto.precio_kilo / 1000) * gramos;
-  }
+  } else if (modoVenta === "kilo") {
+    const kilos = parseFloat(prompt("¿Cuántos kilos deseas agregar?"));
+    if (isNaN(kilos) || kilos <= 0) {
+      alert("Cantidad inválida.");
+      return;
+    }
 
-  if (modoVenta === "kilo") {
-    cantidad = 1;
-    precioFinal = producto.precio_kilo;
-  }
+    if (producto.total_kilos < kilos) {
+      alert(`No hay suficiente stock para ${kilos}kg de ${producto.nombre}. Solo hay ${producto.total_kilos.toFixed(2)} Kg`);
+      return;
+    }
 
-  // Para unidad usamos el precio normal
-  if (modoVenta === "unidad") {
+    cantidad = kilos;
+    precioUnitario = producto.precio_kilo;
+    precioFinal = precioUnitario * kilos;
+
+  } else if (modoVenta === "unidad") {
+    if (producto.cantidad < 1) {
+      alert(`❌ No hay unidades suficientes de ${producto.nombre}.`);
+      return;
+    }
+
     cantidad = 1;
     precioFinal = producto.precio;
+    precioUnitario = producto.precio;
   }
 
   const item = {
     id: producto.id,
     nombre: producto.nombre,
     precio: precioFinal,
+    precioUnitario: precioUnitario,
     modoVenta: modoVenta,
     cantidadEnCarrito: cantidad,
-    cantidad: producto.total_kilos ?? producto.cantidad  // stock disponible
+    cantidad: producto.total_kilos ?? producto.cantidad
   };
-
-  console.log("💡 Producto agregado al carrito:", {
-  nombre: producto.nombre,
-  modoVenta,
-  cantidad,
-  precioFinal
-  });
 
   carrito.push(item);
   actualizarCarrito();
 }
 
   function actualizarCarrito() {
-    const lista = document.getElementById('carrito-lista'); // ✅ Asegúrate que este ID exista en tu HTML
-    const total = document.getElementById('carrito-total'); // ✅ Asegúrate que este ID exista en tu HTML
+    const lista = document.getElementById('carrito-lista');
+    const total = document.getElementById('carrito-total');
 
-    // Es crucial que 'lista' y 'total' no sean null. Si lo son, este error ocurrirá.
-    // El error `Cannot set properties of null` ocurre porque 'lista' es null cuando se ejecuta esta línea:
-    // lista.innerHTML = '';
-    // Esto solo debería ocurrir si el script intenta ejecutarse antes que el DOM esté listo,
-    // o si los IDs 'carrito-lista' o 'carrito-total' no existen en el HTML.
-    // Pero en tu HTML sí existen, lo que nos lleva a pensar que el DOM no está completamente cargado.
-    // La solución a esto es asegurar que `actualizarCarrito()` se llama cuando el DOM está listo.
-
-    // Añadimos una verificación para evitar el error si por alguna razón los elementos no están disponibles aún
     if (!lista || !total) {
-        console.error("Elementos 'carrito-lista' o 'carrito-total' no encontrados. El DOM podría no estar completamente cargado.");
-        return; // Salir de la función si los elementos no existen
+        console.error("Elementos 'carrito-lista' o 'carrito-total' no encontrados.");
+        return;
     }
 
-    lista.innerHTML = ''; // Limpiar el carrito actual
-
+    lista.innerHTML = '';
     let suma = 0;
 
     carrito.forEach((p, index) => {
-    
-        if (typeof p.precio !== 'number' || typeof p.cantidadEnCarrito !== 'number') {
-            console.warn("⚠️ Producto inválido en carrito:", p);
+        if (typeof p.precioUnitario !== 'number' || typeof p.cantidadEnCarrito !== 'number') {
+            console.warn("⚠️ Producto inválido:", p);
             return;
         }
 
-        suma += p.precio; // Usar cantidadEnCarrito para el total
+        // Calcular nuevo precio si es modificable
+        if (p.modoVenta === "unidad") {
+            p.precio = p.precioUnitario * p.cantidadEnCarrito;
+        } else if (p.modoVenta === "kilo") {
+            p.precio = p.precioUnitario * p.cantidadEnCarrito;
+        }
+
+        suma += p.precio;
 
         const li = document.createElement("li");
         li.style.display = 'flex';
@@ -1693,7 +1745,6 @@ function agregarProductoCarrito(producto, modoVenta) {
         li.style.alignItems = 'center';
         li.style.marginBottom = '10px';
 
-        // Mostrar modo de venta correctamente
         let tipo = "unidad";
         if (p.modoVenta === "kilo") tipo = "kg";
         else if (p.modoVenta === "gramo") tipo = "gramos";
@@ -1702,89 +1753,69 @@ function agregarProductoCarrito(producto, modoVenta) {
         textoProducto.textContent = `${p.nombre} (S/ ${p.precio.toFixed(2)} por ${tipo})`;
         li.appendChild(textoProducto);
 
-        // Contenedor para cantidad y botones
         const controles = document.createElement('div');
         controles.style.display = 'flex';
         controles.style.alignItems = 'center';
 
-        // Botón para disminuir cantidad
-        const btnDisminuir = document.createElement('button');
-        btnDisminuir.textContent = '-';
-        btnDisminuir.style.marginRight = '5px';
-        btnDisminuir.style.padding = '5px 10px';
-        btnDisminuir.style.backgroundColor = '#ccc';
-        btnDisminuir.style.border = 'none';
-        btnDisminuir.style.borderRadius = '3px';
-        btnDisminuir.style.cursor = 'pointer';
-        btnDisminuir.onclick = () => { // Usar onclick para simplificar
-            if (p.cantidadEnCarrito > 1) {
-                p.cantidadEnCarrito--;
-            } else {
-                // Si la cantidad llega a 0, eliminar del carrito
-                carrito.splice(index, 1);
-            }
-            actualizarCarrito(); // Volver a renderizar el carrito
-        };
-        controles.appendChild(btnDisminuir);
+        // Permitir modificar solo si NO es gramo
+        if (p.modoVenta !== "gramo") {
+            const btnDisminuir = document.createElement('button');
+            btnDisminuir.textContent = '-';
+            btnDisminuir.onclick = () => {
+                if (p.cantidadEnCarrito > 1) {
+                    p.cantidadEnCarrito--;
+                    actualizarCarrito();
+                } else {
+                    carrito.splice(index, 1);
+                    actualizarCarrito();
+                }
+            };
+            controles.appendChild(btnDisminuir);
 
-        // Input de cantidad
-        const inputCantidad = document.createElement('input');
-        inputCantidad.type = 'number';
-        inputCantidad.value = p.cantidadEnCarrito;
-        inputCantidad.min = '1';
-        inputCantidad.max = p.cantidad; // El stock disponible del producto original
-        inputCantidad.style.width = '50px';
-        inputCantidad.style.textAlign = 'center';
-        inputCantidad.style.margin = '0 5px';
-        inputCantidad.style.padding = '5px';
-        inputCantidad.style.border = '1px solid #ccc';
-        inputCantidad.style.borderRadius = '3px';
-        inputCantidad.onchange = (e) => { // Usar onchange para actualizar al cambiar
-            let nuevaCantidad = parseInt(e.target.value);
-            if (isNaN(nuevaCantidad) || nuevaCantidad < 1) {
-                nuevaCantidad = 1; // Si no es un número válido o es menor que 1, establecer a 1
-            }
-            if (nuevaCantidad > p.cantidad) { // No exceder el stock disponible
-                alert(`No hay suficiente stock para añadir ${nuevaCantidad} unidades de ${p.nombre}. Stock disponible: ${p.cantidad}`);
-                nuevaCantidad = p.cantidad; // Establecer al máximo stock
-            }
-            p.cantidadEnCarrito = nuevaCantidad;
-            actualizarCarrito(); // Volver a renderizar el carrito
-        };
-        controles.appendChild(inputCantidad);
+            const inputCantidad = document.createElement('input');
+            inputCantidad.type = 'number';
+            inputCantidad.value = p.cantidadEnCarrito;
+            inputCantidad.min = '1';
+            inputCantidad.max = p.cantidad;
+            inputCantidad.style.width = '50px';
+            inputCantidad.style.margin = '0 5px';
+            inputCantidad.onchange = (e) => {
+                let nuevaCantidad = parseFloat(e.target.value);
+                if (isNaN(nuevaCantidad) || nuevaCantidad < 1) nuevaCantidad = 1;
+                if (nuevaCantidad > p.cantidad) {
+                    alert(`No hay suficiente stock para ${p.nombre}. Stock: ${p.cantidad}`);
+                    nuevaCantidad = p.cantidad;
+                }
+                p.cantidadEnCarrito = nuevaCantidad;
+                actualizarCarrito();
+            };
+            controles.appendChild(inputCantidad);
 
-        // Botón para aumentar cantidad
-        const btnAumentar = document.createElement('button');
-        btnAumentar.textContent = '+';
-        btnAumentar.style.marginLeft = '5px';
-        btnAumentar.style.padding = '5px 10px';
-        btnAumentar.style.backgroundColor = '#ccc';
-        btnAumentar.style.border = 'none';
-        btnAumentar.style.borderRadius = '3px';
-        btnAumentar.style.cursor = 'pointer';
-        btnAumentar.onclick = () => { // Usar onclick para simplificar
-            if (p.cantidadEnCarrito < p.cantidad) { // No exceder el stock disponible
-                p.cantidadEnCarrito++;
-            } else {
-                alert(`No hay más stock disponible para ${p.nombre}.`);
-            }
-            actualizarCarrito(); // Volver a renderizar el carrito
-        };
-        controles.appendChild(btnAumentar);
+            const btnAumentar = document.createElement('button');
+            btnAumentar.textContent = '+';
+            btnAumentar.onclick = () => {
+                if (p.cantidadEnCarrito < p.cantidad) {
+                    p.cantidadEnCarrito++;
+                    actualizarCarrito();
+                } else {
+                    alert(`No hay más stock disponible para ${p.nombre}`);
+                }
+            };
+            controles.appendChild(btnAumentar);
+        }
 
-        // Botón para eliminar el producto del carrito
         const btnEliminar = document.createElement('button');
         btnEliminar.textContent = 'X';
         btnEliminar.style.marginLeft = '10px';
         btnEliminar.style.padding = '5px 10px';
-        btnEliminar.style.backgroundColor = '#d9534f'; // Rojo
+        btnEliminar.style.backgroundColor = '#d9534f';
         btnEliminar.style.color = 'white';
         btnEliminar.style.border = 'none';
         btnEliminar.style.borderRadius = '3px';
         btnEliminar.style.cursor = 'pointer';
-        btnEliminar.onclick = () => { // Usar onclick para simplificar
-            carrito.splice(index, 1); // Eliminar del array
-            actualizarCarrito(); // Volver a renderizar el carrito
+        btnEliminar.onclick = () => {
+            carrito.splice(index, 1);
+            actualizarCarrito();
         };
         controles.appendChild(btnEliminar);
 
